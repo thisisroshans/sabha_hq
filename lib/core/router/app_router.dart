@@ -7,6 +7,8 @@ import 'package:sabha_hq/features/admin_events/presentation/create_event_screen.
 import 'package:sabha_hq/features/admin_events/presentation/event_list_screen.dart';
 import 'package:sabha_hq/features/attendee_check_in/presentation/check_in_screen.dart';
 import '../../features/admin_auth/application/auth_controller.dart';
+import '../../features/admin_analytics/presentation/analytics_screen.dart'
+    deferred as analytics;
 // ------------------------------------------------------------------
 // 1. STANDARD IMPORTS
 // These are the lightweight screens needed for immediate routing.
@@ -114,11 +116,17 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/dashboard/analytics',
             builder: (context, state) {
-              return const Center(
-                child: Text(
-                  'Analytics Dashboard (Lazy Loaded)',
-                  style: TextStyle(fontSize: 24),
-                ),
+              return FutureBuilder(
+                // This triggers the browser to download the split javascript chunk
+                future: analytics.loadLibrary(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.done) {
+                    return analytics.AnalyticsScreen();
+                  }
+                  return const Scaffold(
+                    body: Center(child: CircularProgressIndicator()),
+                  );
+                },
               );
             },
           ),

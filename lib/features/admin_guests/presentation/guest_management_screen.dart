@@ -99,12 +99,19 @@ class GuestManagementScreen extends ConsumerWidget {
                         loading: () => const CircularProgressIndicator(),
                         error: (e, _) => Text('Error: $e'),
                         data: (events) {
-                          if (events.isEmpty) {
+                          if (events.isEmpty)
                             return const Text('Create an event first.');
-                          }
+
+                          // 1. SAFETY CHECK: Does the selected ID actually exist in the current list?
+                          final bool isValidSelection =
+                              selectedEventId != null &&
+                              events.any((e) => e.id == selectedEventId);
 
                           WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (selectedEventId == null && events.isNotEmpty) {
+                            // 2. If the ID is null OR invalid, reset it to the first valid event
+                            if ((selectedEventId == null ||
+                                    !isValidSelection) &&
+                                events.isNotEmpty) {
                               ref
                                   .read(selectedEventFilterProvider.notifier)
                                   .state = events
@@ -114,7 +121,8 @@ class GuestManagementScreen extends ConsumerWidget {
                           });
 
                           return DropdownButtonFormField<String>(
-                            initialValue: selectedEventId,
+                            // 3. Only pass the ID to the dropdown if we know it's in the list
+                            value: isValidSelection ? selectedEventId : null,
                             decoration: const InputDecoration(
                               labelText: 'Filter by Event',
                               border: OutlineInputBorder(),

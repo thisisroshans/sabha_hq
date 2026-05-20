@@ -7,6 +7,7 @@ import 'package:sabha_hq/features/admin_dashboard/presentation/admin_scaffold.da
 import 'package:sabha_hq/features/admin_events/presentation/create_event_screen.dart';
 import 'package:sabha_hq/features/admin_events/presentation/edit_event_screen.dart';
 import 'package:sabha_hq/features/admin_events/presentation/event_list_screen.dart';
+import 'package:sabha_hq/features/admin_guests/presentation/guest_management_screen.dart';
 import 'package:sabha_hq/features/attendee_check_in/presentation/check_in_screen.dart';
 import '../../features/admin_auth/application/auth_controller.dart';
 import '../../features/admin_analytics/presentation/analytics_screen.dart'
@@ -88,7 +89,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/feedback',
         builder: (context, state) {
-          final eventId = state.uri.queryParameters['eventId'];
+          // final eventId = state.uri.queryParameters['eventId'];
           // return FeedbackScreen(eventId: eventId);
           return const Scaffold(body: Center(child: Text('Feedback Screen')));
         },
@@ -110,30 +111,41 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           return AdminScaffold(child: child);
         },
         routes: [
+          // ------------------------------------------------
+          // SIBLING 1: EVENTS
+          // ------------------------------------------------
           GoRoute(
             path: '/dashboard/events',
             builder: (context, state) => const EventListScreen(),
             routes: [
               GoRoute(
-                path: 'create',
+                path: 'create', // Becomes /dashboard/events/create
                 builder: (context, state) => const CreateEventScreen(),
               ),
-              // ADD THIS ROUTE:
               GoRoute(
-                path: 'edit',
+                path: 'edit', // Becomes /dashboard/events/edit
                 builder: (context, state) {
-                  // Retrieve the Event object passed via 'extra'
                   final event = state.extra as Event;
                   return EditEventScreen(event: event);
                 },
               ),
             ],
           ),
+          // ------------------------------------------------
+          // SIBLING 2: GUESTS (Moved out of the events array!)
+          // ------------------------------------------------
+          GoRoute(
+            path: '/dashboard/guests',
+            builder: (context, state) => const GuestManagementScreen(),
+          ),
+
+          // ------------------------------------------------
+          // SIBLING 3: ANALYTICS
+          // ------------------------------------------------
           GoRoute(
             path: '/dashboard/analytics',
             builder: (context, state) {
               return FutureBuilder(
-                // This triggers the browser to download the split javascript chunk
                 future: analytics.loadLibrary(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.done) {

@@ -25,8 +25,9 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(child: Text('Error: $err')),
         data: (events) {
-          if (events.isEmpty)
+          if (events.isEmpty) {
             return const Center(child: Text('No events found.'));
+          }
 
           // Auto-select the first event if none is selected
           _selectedEventId ??= events.first.id;
@@ -38,7 +39,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
               children: [
                 // EVENT SELECTOR
                 DropdownButtonFormField<String>(
-                  value: _selectedEventId,
+                  initialValue: _selectedEventId,
                   decoration: const InputDecoration(
                     labelText: 'Select Event to Analyze',
                     border: OutlineInputBorder(),

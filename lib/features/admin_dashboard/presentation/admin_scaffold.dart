@@ -12,8 +12,11 @@ class AdminScaffold extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Determine the current path to highlight the correct menu item
     final location = GoRouterState.of(context).matchedLocation;
-    final selectedIndex = location.contains('analytics') ? 1 : 0;
-
+    final selectedIndex = location.contains('guests')
+        ? 1
+        : location.contains('analytics')
+        ? 2
+        : 0;
     return Scaffold(
       body: Row(
         children: [
@@ -22,12 +25,17 @@ class AdminScaffold extends ConsumerWidget {
             selectedIndex: selectedIndex,
             onDestinationSelected: (index) {
               if (index == 0) context.go('/dashboard/events');
-              if (index == 1) context.go('/dashboard/analytics');
+              if (index == 1) context.go('/dashboard/guests');
+              if (index == 2) context.go('/dashboard/analytics');
             },
             destinations: const [
               NavigationRailDestination(
                 icon: Icon(Icons.event),
                 label: Text('Events'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.people),
+                label: Text('Guests'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.analytics),

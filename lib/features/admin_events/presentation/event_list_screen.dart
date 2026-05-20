@@ -50,30 +50,47 @@ class EventListScreen extends ConsumerWidget {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // View event details / QR code link
+                      // Edit Button
                       IconButton(
-                        icon: const Icon(
-                          Icons.qr_code,
-                          color: Colors.deepPurple,
-                        ),
+                        icon: const Icon(Icons.edit, color: Colors.blue),
                         onPressed: () {
-                          // Note: In Phase 4 we will generate the actual QR code here
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Attendee Link: /check-in?eventId=${event.id}',
-                              ),
-                            ),
-                          );
+                          // Pass the event object as 'extra' to the router
+                          context.go('/dashboard/events/edit', extra: event);
                         },
                       ),
-                      // Delete event
+                      // Delete button with Confirmation Dialog
                       IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () {
-                          ref
-                              .read(eventActionControllerProvider.notifier)
-                              .deleteEvent(event.id);
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Delete Event?'),
+                              content: Text(
+                                'Are you sure you want to delete "${event.title}"? This cannot be undone.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.red,
+                                  ),
+                                  child: const Text('Delete'),
+                                ),
+                              ],
+                            ),
+                          );
+
+                          if (confirm == true) {
+                            ref
+                                .read(eventActionControllerProvider.notifier)
+                                .deleteEvent(event.id);
+                          }
                         },
                       ),
                     ],

@@ -29,37 +29,58 @@ class EventActionController extends AutoDisposeAsyncNotifier<void> {
     // Initial state is empty
   }
 
-  Future<void> createNewEvent({
+  // Changed to return Future<bool>
+  Future<bool> createNewEvent({
     required String title,
     required String location,
     required DateTime date,
   }) async {
-    state = const AsyncLoading();
+    state = const AsyncLoading(); // Start loading spinner
 
-    state = await AsyncValue.guard(() async {
+    try {
       final repository = ref.read(eventRepositoryProvider);
 
-      // We pass an empty string for ID; the repository handles generating the real one.
       final newEvent = Event(
         id: '',
         title: title,
         location: location,
         date: date,
-        branding: {
-          'primaryColor': '#673AB7', // Default deep purple hex
-          'logoUrl': '',
-        },
+        branding: {'primaryColor': '#673AB7', 'logoUrl': ''},
       );
 
       await repository.createEvent(newEvent);
-    });
+
+      state = const AsyncData(null); // Stop loading
+      return true; // Success!
+    } catch (e, stackTrace) {
+      state = AsyncError(e, stackTrace); // Stop loading, show error
+      return false; // Failed
+    }
+  }
+
+  // Changed to return Future<bool>
+  Future<bool> updateExistingEvent(Event updatedEvent) async {
+    state = const AsyncLoading();
+    try {
+      final repository = ref.read(eventRepositoryProvider);
+      await repository.updateEvent(updatedEvent);
+
+      state = const AsyncData(null);
+      return true;
+    } catch (e, stackTrace) {
+      state = AsyncError(e, stackTrace);
+      return false;
+    }
   }
 
   Future<void> deleteEvent(String eventId) async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
+    try {
       final repository = ref.read(eventRepositoryProvider);
       await repository.deleteEvent(eventId);
-    });
+      state = const AsyncData(null);
+    } catch (e, stackTrace) {
+      state = AsyncError(e, stackTrace);
+    }
   }
 }

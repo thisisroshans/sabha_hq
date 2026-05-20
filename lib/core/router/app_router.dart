@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sabha_hq/core/models/event.dart';
 import 'package:sabha_hq/features/admin_auth/presentation/admin_login_screen.dart';
 import 'package:sabha_hq/features/admin_dashboard/presentation/admin_scaffold.dart';
 import 'package:sabha_hq/features/admin_events/presentation/create_event_screen.dart';
+import 'package:sabha_hq/features/admin_events/presentation/edit_event_screen.dart';
 import 'package:sabha_hq/features/admin_events/presentation/event_list_screen.dart';
 import 'package:sabha_hq/features/attendee_check_in/presentation/check_in_screen.dart';
 import '../../features/admin_auth/application/auth_controller.dart';
@@ -37,31 +39,37 @@ import '../../features/admin_analytics/presentation/analytics_screen.dart'
 // ------------------------------------------------------------------
 
 final goRouterProvider = Provider<GoRouter>((ref) {
-  // Watch the AsyncValue from our real Firebase Auth stream
   final authState = ref.watch(authStateProvider);
 
   return GoRouter(
-    initialLocation: '/check-in',
+    // 1. CHANGED: Make the dashboard the default starting point instead of check-in
+    initialLocation: '/dashboard/events',
 
     redirect: (context, state) {
-      // If authState is still loading from Firebase, don't redirect yet
       if (authState.isLoading) return null;
 
-      // Determine if a user is actively logged in
       final isLoggedIn = authState.valueOrNull != null;
 
       final isGoingToAdmin = state.matchedLocation.startsWith('/dashboard');
       final isGoingToLogin = state.matchedLocation == '/login';
+      final isRoot = state.matchedLocation == '/';
 
+      // 2. Route root path directly to the dashboard
+      if (isRoot) {
+        return '/dashboard/events';
+      }
+
+      // 3. Prevent unauthorized access to the dashboard
       if (isGoingToAdmin && !isLoggedIn) {
         return '/login';
       }
 
+      // 4. Prevent logged-in admins from seeing the login screen
       if (isGoingToLogin && isLoggedIn) {
         return '/dashboard/events';
       }
 
-      return null;
+      return null; // Let all other routes (like /check-in) proceed normally
     },
 
     routes: [
@@ -106,10 +114,18 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             path: '/dashboard/events',
             builder: (context, state) => const EventListScreen(),
             routes: [
-              // This creates the child path: /dashboard/events/create
               GoRoute(
                 path: 'create',
                 builder: (context, state) => const CreateEventScreen(),
+              ),
+              // ADD THIS ROUTE:
+              GoRoute(
+                path: 'edit',
+                builder: (context, state) {
+                  // Retrieve the Event object passed via 'extra'
+                  final event = state.extra as Event;
+                  return EditEventScreen(event: event);
+                },
               ),
             ],
           ),

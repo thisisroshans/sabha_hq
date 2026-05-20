@@ -37,8 +37,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
   Future<void> _submit() async {
     if (_formKey.currentState!.validate() && _selectedDate != null) {
-      // Execute the creation
-      await ref
+      // Wait for the boolean result
+      final success = await ref
           .read(eventActionControllerProvider.notifier)
           .createNewEvent(
             title: _titleController.text.trim(),
@@ -46,8 +46,21 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             date: _selectedDate!,
           );
 
-      // Pop back to the event list
-      if (mounted) context.go('/dashboard/events');
+      if (!mounted) return;
+
+      if (success) {
+        // If successful, navigate away (this destroys the screen and clears the form)
+        context.go('/dashboard/events');
+      } else {
+        // If it failed, show the error message so you aren't guessing
+        final errorState = ref.read(eventActionControllerProvider).error;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $errorState'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } else if (_selectedDate == null) {
       ScaffoldMessenger.of(
         context,

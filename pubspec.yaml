@@ -1,0 +1,47 @@
+name: sabha_hq
+description: "A dual-route Flutter web application for Admin Dashboard and Attendee Check-in."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # --- Firebase Foundation ---
+  firebase_core: ^2.25.0
+  firebase_auth: ^4.17.0
+  cloud_firestore: ^4.15.0
+  
+  # --- Routing ---
+  go_router: ^17.2.3
+
+  # --- State Management ---
+  flutter_riverpod: ^2.5.1
+  
+  # --- Data Models & Serialization ---
+  freezed_annotation: ^3.1.0
+  json_annotation: ^4.8.1
+  
+  # --- Admin Dashboard UI ---
+  fl_chart: ^0.67.0
+  
+  # --- Web Utilities ---
+  google_fonts: ^6.2.1
+  flutter_web_plugins:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  
+  # --- Code Generators (Aligned to Freezed 3.x Ecosystem) ---
+  build_runner: ^2.4.8
+  freezed: ^3.0.0            # <-- Upgraded from 2.4.7 to resolve the conflict
+  json_serializable: ^6.11.0
+
+flutter:
+  uses-material-design: true

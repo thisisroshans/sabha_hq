@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sabha_hq/features/admin_events/presentation/components/qr_code_dialog.dart';
 import '../application/event_providers.dart';
 
 class EventListScreen extends ConsumerWidget {
@@ -50,6 +51,19 @@ class EventListScreen extends ConsumerWidget {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.qr_code,
+                          color: Colors.deepPurple,
+                        ),
+                        onPressed: () {
+                          // Replace the SnackBar with the Dialog
+                          showDialog(
+                            context: context,
+                            builder: (context) => QrCodeDialog(event: event),
+                          );
+                        },
+                      ),
                       // Edit Button
                       IconButton(
                         icon: const Icon(Icons.edit, color: Colors.blue),

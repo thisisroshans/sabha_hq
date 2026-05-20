@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "602513846772",
+    "project_id": "sabha-hq",
+    "storage_bucket": "sabha-hq.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:602513846772:android:cefd76a816452ba4c149a1",
+        "android_client_info": {
+          "package_name": "com.example.sabha_hq"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCYa_KmPkiGd5VLxQGU4aRAvcIH0bgZtHY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

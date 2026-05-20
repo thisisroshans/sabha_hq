@@ -1,8 +1,1 @@
-{
-  "firestore": {
-    "database": "(default)",
-    "location": "asia-east1",
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
-  }
-}
+{"firestore":{"database":"(default)","location":"asia-south1","rules":"firestore.rules","indexes":"firestore.indexes.json"},"auth":{"providers":{"emailPassword":true}},"flutter":{"platforms":{"android":{"default":{"projectId":"sabha-hq","appId":"1:602513846772:android:cefd76a816452ba4c149a1","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"sabha-hq","configurations":{"android":"1:602513846772:android:cefd76a816452ba4c149a1","ios":"1:602513846772:ios:5188fda4191728abc149a1","web":"1:602513846772:web:08eafeedaa09cfa4c149a1"}}}}}}

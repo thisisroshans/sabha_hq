@@ -5,6 +5,7 @@ import 'package:sabha_hq/features/admin_auth/presentation/admin_login_screen.dar
 import 'package:sabha_hq/features/admin_dashboard/presentation/admin_scaffold.dart';
 import 'package:sabha_hq/features/admin_events/presentation/create_event_screen.dart';
 import 'package:sabha_hq/features/admin_events/presentation/event_list_screen.dart';
+import 'package:sabha_hq/features/attendee_check_in/presentation/check_in_screen.dart';
 import '../../features/admin_auth/application/auth_controller.dart';
 // ------------------------------------------------------------------
 // 1. STANDARD IMPORTS
@@ -68,20 +69,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/check-in',
         builder: (context, state) {
-          // Extracts ?eventId=XYZ from the URL
           final eventId = state.uri.queryParameters['eventId'];
 
-          // return CheckInScreen(eventId: eventId);
-          return Scaffold(
-            appBar: AppBar(title: const Text('Attendee Check-In')),
-            body: Center(
-              child: Text(
-                eventId != null
-                    ? 'Checking in to: $eventId'
-                    : 'Please scan a valid QR code.',
-              ),
-            ),
-          );
+          // Return the actual UI!
+          return CheckInScreen(eventId: eventId);
         },
       ),
       GoRoute(

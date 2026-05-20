@@ -11,6 +11,7 @@ abstract class Attendee with _$Attendee {
     required String eventId,
     required String name,
     required String email,
+    required String phone,
 
     @Default('guest') String role,
     @Default(false) bool isCheckedIn,

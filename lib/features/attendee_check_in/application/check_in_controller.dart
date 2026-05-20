@@ -20,7 +20,7 @@ class CheckInController extends AutoDisposeAsyncNotifier<Attendee?> {
 
     state = await AsyncValue.guard(() async {
       final repository = ref.read(checkInRepositoryProvider);
-      return await repository.verifyAndCheckIn(eventId, email);
+      return await repository.searchAndCheckIn(eventId, email);
     });
   }
 }

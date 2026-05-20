@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../application/check_in_controller.dart';
+import '../application/staff_check_in_controller.dart';
 
 class CheckInScreen extends ConsumerStatefulWidget {
   final String? eventId;
-
   const CheckInScreen({super.key, required this.eventId});
 
   @override
@@ -12,182 +11,232 @@ class CheckInScreen extends ConsumerStatefulWidget {
 }
 
 class _CheckInScreenState extends ConsumerState<CheckInScreen> {
-  final _emailController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
+  final _phoneController = TextEditingController();
+  final _nameController = TextEditingController();
+
+  // Focus nodes allow us to keep the cursor active without mouse clicks
+  final _phoneFocus = FocusNode();
+  final _nameFocus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-focus the phone field when the screen loads
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _phoneFocus.requestFocus(),
+    );
+  }
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _phoneController.dispose();
+    _nameController.dispose();
+    _phoneFocus.dispose();
+    _nameFocus.dispose();
     super.dispose();
   }
 
-  void _submit() {
-    if (_formKey.currentState!.validate() && widget.eventId != null) {
-      ref
-          .read(checkInControllerProvider.notifier)
-          .submitCheckIn(widget.eventId!, _emailController.text);
-    }
+  void _resetForm() {
+    _phoneController.clear();
+    _nameController.clear();
+    ref.read(staffCheckInProvider.notifier).reset();
+    _phoneFocus.requestFocus(); // Snap focus back to phone input for next guest
   }
 
   @override
   Widget build(BuildContext context) {
-    // Failsafe if they somehow navigated here without a QR code
-    if (widget.eventId == null || widget.eventId!.isEmpty) {
+    if (widget.eventId == null) {
       return const Scaffold(
-        body: Center(child: Text('Invalid QR Code. Missing Event ID.')),
+        body: Center(child: Text('Invalid Link. Missing Event ID.')),
       );
     }
 
-    final checkInState = ref.watch(checkInControllerProvider);
+    final uiState = ref.watch(staffCheckInProvider);
+    final notifier = ref.read(staffCheckInProvider.notifier);
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: Colors.grey[100],
+      appBar: AppBar(
+        title: const Text('Staff Check-In Terminal'),
+        backgroundColor: Colors.deepPurple,
+        foregroundColor: Colors.white,
+      ),
       body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 400),
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: const [
-                BoxShadow(color: Colors.black12, blurRadius: 20),
-              ],
-            ),
-            child: checkInState.when(
-              // -------------------------------------------------------------
-              // SUCCESS STATE: Replaces the form with a welcome message
-              // -------------------------------------------------------------
-              data: (attendee) {
-                if (attendee != null) {
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.check_circle,
-                        color: Colors.green,
-                        size: 80,
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        'Welcome, ${attendee.name}!',
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 8),
-                      const Text('You are successfully checked in.'),
-                      const SizedBox(height: 32),
-                      OutlinedButton(
-                        onPressed: () {
-                          // Allow another person to use the same device to check in
-                          ref.invalidate(checkInControllerProvider);
-                          _emailController.clear();
-                        },
-                        child: const Text('Check in someone else'),
-                      ),
-                    ],
-                  );
-                }
+        child: Container(
+          width: 500,
+          padding: const EdgeInsets.all(40),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 20)],
+          ),
+          child: _buildBody(uiState, notifier, widget.eventId!),
+        ),
+      ),
+    );
+  }
 
-                // -------------------------------------------------------------
-                // INPUT FORM STATE
-                // -------------------------------------------------------------
-                return Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Icon(
-                        Icons.qr_code_scanner,
-                        size: 64,
-                        color: Colors.deepPurple,
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Event Check-In',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Enter your registered email to verify your ticket.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                      const SizedBox(height: 32),
-
-                      TextFormField(
-                        controller: _emailController,
-                        decoration: const InputDecoration(
-                          labelText: 'Email Address',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.email),
-                        ),
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (value) =>
-                            value != null && value.contains('@')
-                            ? null
-                            : 'Enter a valid email',
-                      ),
-                      const SizedBox(height: 24),
-
-                      ElevatedButton(
-                        onPressed: _submit,
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor: Colors.deepPurple,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: const Text(
-                          'Check In',
-                          style: TextStyle(fontSize: 16),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-
-              // -------------------------------------------------------------
-              // ERROR STATE
-              // -------------------------------------------------------------
-              error: (error, stack) => Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.red, size: 64),
-                  const SizedBox(height: 16),
-                  Text(
-                    error.toString().replaceAll('Exception: ', ''),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.red, fontSize: 16),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () => ref.invalidate(checkInControllerProvider),
-                    child: const Text('Try Again'),
-                  ),
-                ],
+  Widget _buildBody(
+    StaffCheckInState uiState,
+    StaffCheckInController notifier,
+    String eventId,
+  ) {
+    // -------------------------------------------------------------
+    // SUCCESS SCREEN (Fast Reset)
+    // -------------------------------------------------------------
+    if (uiState.step == CheckInStep.success) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle, color: Colors.green[600], size: 100),
+          const SizedBox(height: 24),
+          Text(
+            uiState.isWelcomeBack
+                ? 'Already Checked In!'
+                : 'Check-In Successful!',
+            style: const TextStyle(fontSize: 20, color: Colors.grey),
+          ),
+          Text(
+            uiState.checkedInGuest?.name ?? 'Guest',
+            style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 40),
+          SizedBox(
+            width: double.infinity,
+            height: 60,
+            child: ElevatedButton(
+              onPressed: _resetForm,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
               ),
-
-              // -------------------------------------------------------------
-              // LOADING STATE
-              // -------------------------------------------------------------
-              loading: () => const SizedBox(
-                height: 200,
-                child: Center(child: CircularProgressIndicator()),
+              child: const Text(
+                'Next Guest (Enter)',
+                style: TextStyle(fontSize: 20),
               ),
             ),
           ),
+        ],
+      );
+    }
+
+    // -------------------------------------------------------------
+    // WALK-IN REGISTRATION SCREEN
+    // -------------------------------------------------------------
+    if (uiState.step == CheckInStep.needsWalkInName) {
+      // Auto-focus name field
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _nameFocus.requestFocus(),
+      );
+
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Unregistered Guest',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.orange,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Phone: ${uiState.pendingPhone}',
+            style: const TextStyle(color: Colors.grey),
+          ),
+          const SizedBox(height: 24),
+          TextField(
+            controller: _nameController,
+            focusNode: _nameFocus,
+            decoration: const InputDecoration(
+              labelText: 'Guest Full Name',
+              border: OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.done,
+            onSubmitted: (val) {
+              if (val.isNotEmpty) notifier.submitWalkIn(eventId, val);
+            },
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: () =>
+                  notifier.submitWalkIn(eventId, _nameController.text.trim()),
+              child: const Text('Register & Check In'),
+            ),
+          ),
+          TextButton(onPressed: _resetForm, child: const Text('Cancel')),
+        ],
+      );
+    }
+
+    // -------------------------------------------------------------
+    // DEFAULT SEARCH SCREEN
+    // -------------------------------------------------------------
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (uiState.step == CheckInStep.error) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            color: Colors.red[50],
+            child: Text(
+              uiState.errorMessage ?? 'Error',
+              style: const TextStyle(color: Colors.red),
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+        const Icon(Icons.qr_code_scanner, size: 80, color: Colors.deepPurple),
+        const SizedBox(height: 16),
+        const Text(
+          'Enter Attendee Phone Number',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
-      ),
+        const SizedBox(height: 32),
+        TextField(
+          controller: _phoneController,
+          focusNode: _phoneFocus,
+          decoration: const InputDecoration(
+            labelText: 'Phone Number',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.phone),
+          ),
+          keyboardType: TextInputType.phone,
+          textInputAction: TextInputAction.search,
+          onSubmitted: (val) {
+            if (val.isNotEmpty) notifier.submitPhone(eventId, val);
+          },
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          height: 60,
+          child: ElevatedButton(
+            onPressed: uiState.step == CheckInStep.loading
+                ? null
+                : () => notifier.submitPhone(
+                    eventId,
+                    _phoneController.text.trim(),
+                  ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple,
+              foregroundColor: Colors.white,
+            ),
+            child: uiState.step == CheckInStep.loading
+                ? const CircularProgressIndicator(color: Colors.white)
+                : const Text(
+                    'Search & Check In',
+                    style: TextStyle(fontSize: 20),
+                  ),
+          ),
+        ),
+      ],
     );
   }
 }

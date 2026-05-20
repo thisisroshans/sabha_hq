@@ -29,6 +29,7 @@ class GuestActionController extends AutoDisposeAsyncNotifier<void> {
     required String name,
     required String email,
     required String role,
+    required String phone,
   }) async {
     state = const AsyncLoading();
     final eventId = ref.read(selectedEventFilterProvider);
@@ -40,6 +41,7 @@ class GuestActionController extends AutoDisposeAsyncNotifier<void> {
       final newGuest = Attendee(
         id: '',
         eventId: eventId,
+        phone: phone,
         name: name,
         email: email,
         role: role,

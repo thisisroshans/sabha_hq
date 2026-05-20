@@ -9,6 +9,7 @@ class GuestManagementScreen extends ConsumerWidget {
   void _showAddGuestDialog(BuildContext context, WidgetRef ref) {
     final nameController = TextEditingController();
     final emailController = TextEditingController();
+    final phoneController = TextEditingController();
     String selectedRole = 'guest';
 
     showDialog(
@@ -26,6 +27,11 @@ class GuestManagementScreen extends ConsumerWidget {
             TextField(
               controller: emailController,
               decoration: const InputDecoration(labelText: 'Email Address'),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: phoneController,
+              decoration: const InputDecoration(labelText: 'Phone Number'),
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
@@ -54,6 +60,7 @@ class GuestManagementScreen extends ConsumerWidget {
                   .addGuest(
                     name: nameController.text.trim(),
                     email: emailController.text.trim().toLowerCase(),
+                    phone: phoneController.text.trim(),
                     role: selectedRole,
                   );
               if (success && context.mounted) Navigator.pop(context);

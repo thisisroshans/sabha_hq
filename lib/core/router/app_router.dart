@@ -45,34 +45,27 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     // 1. CHANGED: Make the dashboard the default starting point instead of check-in
     initialLocation: '/dashboard/events',
-
     redirect: (context, state) {
       if (authState.isLoading) return null;
 
-      final isLoggedIn = authState.valueOrNull != null;
+      final user = authState.valueOrNull;
+      // Differentiate: Admins have emails, Attendees using Phone Auth do not.
+      final isAdmin = user != null && user.email != null;
 
       final isGoingToAdmin = state.matchedLocation.startsWith('/dashboard');
       final isGoingToLogin = state.matchedLocation == '/login';
       final isRoot = state.matchedLocation == '/';
 
-      // 2. Route root path directly to the dashboard
-      if (isRoot) {
-        return '/dashboard/events';
-      }
+      if (isRoot) return '/dashboard/events';
 
-      // 3. Prevent unauthorized access to the dashboard
-      if (isGoingToAdmin && !isLoggedIn) {
-        return '/login';
-      }
+      // Block non-admins (including phone-authenticated attendees) from the dashboard
+      if (isGoingToAdmin && !isAdmin) return '/login';
 
-      // 4. Prevent logged-in admins from seeing the login screen
-      if (isGoingToLogin && isLoggedIn) {
-        return '/dashboard/events';
-      }
+      // If an admin hits login, send them to dashboard
+      if (isGoingToLogin && isAdmin) return '/dashboard/events';
 
-      return null; // Let all other routes (like /check-in) proceed normally
+      return null;
     },
-
     routes: [
       // ==========================================
       // ATTENDEE BRANCH (Public & Lightweight)

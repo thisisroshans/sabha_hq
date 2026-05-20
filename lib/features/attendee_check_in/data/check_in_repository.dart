@@ -3,42 +3,66 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sabha_hq/core/firebase/firestore_refs.dart';
 import 'package:sabha_hq/core/models/attendee.dart';
 
-final checkInRepositoryProvider = Provider<CheckInRepository>((ref) {
-  return CheckInRepository();
-});
+final checkInRepositoryProvider = Provider<CheckInRepository>(
+  (ref) => CheckInRepository(),
+);
 
 class CheckInRepository {
-  /// Searches for the attendee by email and marks them as checked in
-  Future<Attendee> verifyAndCheckIn(String eventId, String email) async {
-    // 1. Query the subcollection for this specific email
+  /// Searches for a guest by phone. If found, checks them in.
+  /// Returns NULL if the guest is not found (Walk-In required).
+  Future<Attendee?> searchAndCheckIn(String eventId, String phone) async {
+    // Standardize phone format to ensure accurate matching (e.g., remove spaces)
+    final formattedPhone = phone.replaceAll(RegExp(r'\s+'), '');
+
     final querySnapshot = await FirestoreRefs.attendees(
       eventId,
-    ).where('email', isEqualTo: email.toLowerCase().trim()).limit(1).get();
+    ).where('phone', isEqualTo: formattedPhone).limit(1).get();
 
-    // 2. Validate existence
-    if (querySnapshot.docs.isEmpty) {
-      throw Exception(
-        'Email not found on the guest list. Please check for typos.',
-      );
-    }
+    // Not found? Return null so the controller can trigger the Walk-In registration flow.
+    if (querySnapshot.docs.isEmpty) return null;
 
     final doc = querySnapshot.docs.first;
     final attendee = doc.data();
 
-    // 3. Prevent double check-ins
+    // If already checked in, return the attendee so the UI can say "Welcome Back"
     if (attendee.isCheckedIn) {
-      throw Exception(
-        'You are already checked in! Welcome back, ${attendee.name}.',
-      );
+      return attendee;
     }
 
-    // 4. Update Firestore directly
+    // Check them in!
     await doc.reference.update({
       'isCheckedIn': true,
       'checkInTime': FieldValue.serverTimestamp(),
     });
 
-    // 5. Return the updated model to the UI for a personalized greeting
     return attendee.copyWith(isCheckedIn: true, checkInTime: DateTime.now());
+  }
+
+  /// Registers a brand new walk-in guest and instantly checks them in.
+  Future<Attendee> registerWalkIn(
+    String eventId,
+    String phone,
+    String name,
+  ) async {
+    final formattedPhone = phone.replaceAll(RegExp(r'\s+'), '');
+
+    // Generate a new document reference to get a unique ID
+    final docRef = FirestoreRefs.attendees(eventId).doc();
+
+    final walkInGuest = Attendee(
+      id: docRef.id,
+      eventId: eventId,
+      name: name,
+      email: '', // Not required for walk-ins based on the staff-driven model
+      phone: formattedPhone,
+      role: 'guest',
+      isCheckedIn: true,
+      checkInTime: DateTime.now(),
+    );
+
+    // Save the new guest to Firestore
+    await docRef.set(walkInGuest);
+
+    return walkInGuest;
   }
 }

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sabha_hq/features/admin_auth/presentation/admin_login_screen.dart';
 import 'package:sabha_hq/features/admin_dashboard/presentation/admin_scaffold.dart';
+import 'package:sabha_hq/features/admin_events/presentation/create_event_screen.dart';
+import 'package:sabha_hq/features/admin_events/presentation/event_list_screen.dart';
 import '../../features/admin_auth/application/auth_controller.dart';
 // ------------------------------------------------------------------
 // 1. STANDARD IMPORTS
@@ -109,14 +111,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: '/dashboard/events',
-            builder: (context, state) {
-              return const Center(
-                child: Text(
-                  'Event Management List',
-                  style: TextStyle(fontSize: 24),
-                ),
-              );
-            },
+            builder: (context, state) => const EventListScreen(),
+            routes: [
+              // This creates the child path: /dashboard/events/create
+              GoRoute(
+                path: 'create',
+                builder: (context, state) => const CreateEventScreen(),
+              ),
+            ],
           ),
           GoRoute(
             path: '/dashboard/analytics',

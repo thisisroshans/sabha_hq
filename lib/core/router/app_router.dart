@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
+import 'package:sabha_hq/features/admin_auth/presentation/admin_login_screen.dart';
+import 'package:sabha_hq/features/admin_dashboard/presentation/admin_scaffold.dart';
+import '../../features/admin_auth/application/auth_controller.dart';
 // ------------------------------------------------------------------
 // 1. STANDARD IMPORTS
 // These are the lightweight screens needed for immediate routing.
@@ -24,34 +26,37 @@ import 'package:go_router/go_router.dart';
 // 3. AUTH STATE PROVIDER (Mock for now)
 // Replace this with your actual FirebaseAuth state provider.
 // ------------------------------------------------------------------
-final authStateProvider = StateProvider<bool>((ref) => false);
 
 // ------------------------------------------------------------------
 // 4. ROUTER CONFIGURATION
 // ------------------------------------------------------------------
+
 final goRouterProvider = Provider<GoRouter>((ref) {
-  // Listen to auth state changes to trigger redirects automatically
-  final isLoggedIn = ref.watch(authStateProvider);
+  // Watch the AsyncValue from our real Firebase Auth stream
+  final authState = ref.watch(authStateProvider);
 
   return GoRouter(
     initialLocation: '/check-in',
 
-    // Global redirect handles Route Guarding
     redirect: (context, state) {
+      // If authState is still loading from Firebase, don't redirect yet
+      if (authState.isLoading) return null;
+
+      // Determine if a user is actively logged in
+      final isLoggedIn = authState.valueOrNull != null;
+
       final isGoingToAdmin = state.matchedLocation.startsWith('/dashboard');
       final isGoingToLogin = state.matchedLocation == '/login';
 
-      // 1. Prevent unauthorized access to the dashboard
       if (isGoingToAdmin && !isLoggedIn) {
         return '/login';
       }
 
-      // 2. Prevent logged-in admins from seeing the login screen
       if (isGoingToLogin && isLoggedIn) {
         return '/dashboard/events';
       }
 
-      return null; // Proceed as normal
+      return null;
     },
 
     routes: [
@@ -92,75 +97,19 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         builder: (context, state) {
-          // return const AdminLoginScreen();
-          return Scaffold(
-            body: Center(
-              child: ElevatedButton(
-                onPressed: () => ref.read(authStateProvider.notifier).state =
-                    true, // Mock login
-                child: const Text('Login as Admin'),
-              ),
-            ),
-          );
+          return const AdminLoginScreen();
         },
       ),
-
       // ShellRoute keeps the Side Menu persistent while swapping inner pages
       ShellRoute(
         builder: (context, state, child) {
-          // return AdminScaffold(child: child);
-
-          // Basic Mock Scaffold to show how ShellRoute works
-          return Scaffold(
-            body: Row(
-              children: [
-                NavigationRail(
-                  extended: true,
-                  selectedIndex: state.matchedLocation.contains('analytics')
-                      ? 1
-                      : 0,
-                  onDestinationSelected: (index) {
-                    if (index == 0) context.go('/dashboard/events');
-                    if (index == 1) context.go('/dashboard/analytics');
-                  },
-                  destinations: const [
-                    NavigationRailDestination(
-                      icon: Icon(Icons.event),
-                      label: Text('Events'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.analytics),
-                      label: Text('Analytics'),
-                    ),
-                  ],
-                  trailing: Expanded(
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 16.0),
-                        child: TextButton.icon(
-                          icon: const Icon(Icons.logout),
-                          label: const Text('Logout'),
-                          onPressed: () =>
-                              ref.read(authStateProvider.notifier).state =
-                                  false, // Mock logout
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const VerticalDivider(thickness: 1, width: 1),
-                // The 'child' is either the EventList or Analytics screen
-                Expanded(child: child),
-              ],
-            ),
-          );
+          // Now it cleanly returns the isolated widget
+          return AdminScaffold(child: child);
         },
         routes: [
           GoRoute(
             path: '/dashboard/events',
             builder: (context, state) {
-              // return const EventListScreen();
               return const Center(
                 child: Text(
                   'Event Management List',
@@ -172,22 +121,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/dashboard/analytics',
             builder: (context, state) {
-              // -------------------------------------------------------------
-              // DEFERRED LOADING IMPLEMENTATION
-              // -------------------------------------------------------------
-              /* 
-              return FutureBuilder(
-                future: analytics.loadLibrary(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.done) {
-                    // Once downloaded, render the heavy charting screen
-                    return analytics.AnalyticsScreen();
-                  }
-                  // Show a spinner while the JS chunk is downloading
-                  return const Center(child: CircularProgressIndicator());
-                },
-              );
-              */
               return const Center(
                 child: Text(
                   'Analytics Dashboard (Lazy Loaded)',

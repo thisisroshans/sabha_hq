@@ -41,10 +41,10 @@ class FirestoreRefs {
             final data = snapshot.data() ?? {};
             data['id'] = snapshot.id;
             data['eventId'] = eventId; // Ensure eventId is present
-            return Attendee.fromJson(data);
+            return Attendee.fromMap(data, snapshot.id);
           },
           toFirestore: (attendee, _) {
-            final json = attendee.toJson();
+            final json = attendee.toMap();
             json.remove('id');
             json.remove('eventId');
             return json;

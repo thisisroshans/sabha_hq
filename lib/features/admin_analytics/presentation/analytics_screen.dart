@@ -173,7 +173,7 @@ class _StatTile extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: ListTile(
-        leading: Icon(icon, color: Colors.deepPurple, size: 32),
+        leading: Icon(icon, color: const Color(0xFFc51f43), size: 32),
         title: Text(title, style: const TextStyle(color: Colors.grey)),
         subtitle: Text(
           value.toString(),

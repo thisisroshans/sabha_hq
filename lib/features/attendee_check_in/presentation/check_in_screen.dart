@@ -58,7 +58,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
         title: const Text('Staff Check-In Terminal'),
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: const Color(0xFFc51f43),
         foregroundColor: Colors.white,
       ),
       body: Center(
@@ -122,56 +122,133 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
     }
 
     // -------------------------------------------------------------
-    // WALK-IN REGISTRATION SCREEN
+    // WALK-IN FULL REGISTRATION SCREEN
     // -------------------------------------------------------------
     if (uiState.step == CheckInStep.needsWalkInName) {
-      // Auto-focus name field
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _nameFocus.requestFocus(),
-      );
+      // Create local controllers for the new fields (ensure you dispose these in the State class)
+      final emailController = TextEditingController();
+      final companyController = TextEditingController();
+      final designationController = TextEditingController();
+      final industryController = TextEditingController();
 
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Unregistered Guest',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.orange,
-            ),
+      return SizedBox(
+        height: 600, // Constrain height so the form can scroll if needed
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'New Registration',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.deepPurple,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Phone: ${uiState.pendingPhone}',
+                style: const TextStyle(color: Colors.grey, fontSize: 16),
+              ),
+              const SizedBox(height: 24),
+
+              TextField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Full Name *',
+                  border: OutlineInputBorder(),
+                ),
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 16),
+
+              TextField(
+                controller: emailController,
+                decoration: const InputDecoration(
+                  labelText: 'Email Address *',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 16),
+
+              TextField(
+                controller: companyController,
+                decoration: const InputDecoration(
+                  labelText: 'Company Name',
+                  border: OutlineInputBorder(),
+                ),
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 16),
+
+              TextField(
+                controller: designationController,
+                decoration: const InputDecoration(
+                  labelText: 'Designation / Title',
+                  border: OutlineInputBorder(),
+                ),
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 16),
+
+              TextField(
+                controller: industryController,
+                decoration: const InputDecoration(
+                  labelText: 'Industry',
+                  border: OutlineInputBorder(),
+                ),
+                textInputAction: TextInputAction.done,
+              ),
+              const SizedBox(height: 32),
+
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurple,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    if (_nameController.text.trim().isEmpty ||
+                        emailController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Name and Email are required.'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+
+                    notifier.submitFullRegistration(
+                      eventId: eventId,
+                      name: _nameController.text.trim(),
+                      email: emailController.text.trim(),
+                      companyName: companyController.text.trim(),
+                      designation: designationController.text.trim(),
+                      industry: industryController.text.trim(),
+                    );
+                  },
+                  child: const Text(
+                    'Complete Registration & Check In',
+                    style: TextStyle(fontSize: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: TextButton(
+                  onPressed: _resetForm,
+                  child: const Text('Cancel & Return to Search'),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Phone: ${uiState.pendingPhone}',
-            style: const TextStyle(color: Colors.grey),
-          ),
-          const SizedBox(height: 24),
-          TextField(
-            controller: _nameController,
-            focusNode: _nameFocus,
-            decoration: const InputDecoration(
-              labelText: 'Guest Full Name',
-              border: OutlineInputBorder(),
-            ),
-            textInputAction: TextInputAction.done,
-            onSubmitted: (val) {
-              if (val.isNotEmpty) notifier.submitWalkIn(eventId, val);
-            },
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              onPressed: () =>
-                  notifier.submitWalkIn(eventId, _nameController.text.trim()),
-              child: const Text('Register & Check In'),
-            ),
-          ),
-          TextButton(onPressed: _resetForm, child: const Text('Cancel')),
-        ],
+        ),
       );
     }
 
@@ -192,7 +269,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
           ),
           const SizedBox(height: 24),
         ],
-        const Icon(Icons.qr_code_scanner, size: 80, color: Colors.deepPurple),
+        const Icon(Icons.qr_code_scanner, size: 80, color: Color(0xFFc51f43)),
         const SizedBox(height: 16),
         const Text(
           'Enter Attendee Phone Number',
@@ -225,7 +302,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                     _phoneController.text.trim(),
                   ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepPurple,
+              backgroundColor: const Color(0xFFc51f43),
               foregroundColor: Colors.white,
             ),
             child: uiState.step == CheckInStep.loading

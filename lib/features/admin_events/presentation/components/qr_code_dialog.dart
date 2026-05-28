@@ -32,11 +32,11 @@ class QrCodeDialog extends StatelessWidget {
         gapless: true,
         eyeStyle: const QrEyeStyle(
           eyeShape: QrEyeShape.square,
-          color: Colors.deepPurple,
+          color: Color(0xFFc51f43),
         ),
         dataModuleStyle: const QrDataModuleStyle(
           dataModuleShape: QrDataModuleShape.square,
-          color: Colors.deepPurple,
+          color: Color(0xFFc51f43),
         ),
       );
 
@@ -146,11 +146,11 @@ class QrCodeDialog extends StatelessWidget {
                   size: 300,
                   eyeStyle: const QrEyeStyle(
                     eyeShape: QrEyeShape.square,
-                    color: Colors.deepPurple,
+                    color: Color(0xFFc51f43),
                   ),
                   dataModuleStyle: const QrDataModuleStyle(
                     dataModuleShape: QrDataModuleShape.square,
-                    color: Colors.deepPurple,
+                    color: Color(0xFFc51f43),
                   ),
                   backgroundColor: Colors.white,
                 ),
@@ -195,7 +195,7 @@ class QrCodeDialog extends StatelessWidget {
                       icon: const Icon(
                         Icons.copy,
                         size: 20,
-                        color: Colors.deepPurple,
+                        color: Color(0xFFc51f43),
                       ),
                       onPressed: () => _copyLink(context),
                     ),

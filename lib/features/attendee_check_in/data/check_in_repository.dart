@@ -38,31 +38,34 @@ class CheckInRepository {
     return attendee.copyWith(isCheckedIn: true, checkInTime: DateTime.now());
   }
 
-  /// Registers a brand new walk-in guest and instantly checks them in.
-  Future<Attendee> registerWalkIn(
-    String eventId,
-    String phone,
-    String name,
-  ) async {
+  /// Registers a brand new walk-in guest with full details and instantly checks them in.
+  Future<Attendee> registerFullWalkIn({
+    required String eventId,
+    required String phone,
+    required String name,
+    required String email,
+    required String companyName,
+    required String designation,
+    required String industry,
+  }) async {
     final formattedPhone = phone.replaceAll(RegExp(r'\s+'), '');
-
-    // Generate a new document reference to get a unique ID
     final docRef = FirestoreRefs.attendees(eventId).doc();
 
     final walkInGuest = Attendee(
       id: docRef.id,
       eventId: eventId,
       name: name,
-      email: '', // Not required for walk-ins based on the staff-driven model
+      email: email,
       phone: formattedPhone,
+      companyName: companyName,
+      designation: designation,
+      industry: industry,
       role: 'guest',
       isCheckedIn: true,
       checkInTime: DateTime.now(),
     );
 
-    // Save the new guest to Firestore
     await docRef.set(walkInGuest);
-
     return walkInGuest;
   }
 }

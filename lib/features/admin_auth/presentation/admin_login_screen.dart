@@ -60,11 +60,11 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
                 const Icon(
                   Icons.admin_panel_settings,
                   size: 64,
-                  color: Colors.deepPurple,
+                  color: Color(0xFFc51f43),
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Sabha HQ Admin',
+                  'The Unpuzzle Project - Admin',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
@@ -114,7 +114,7 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
                   onPressed: authState.isLoading ? null : _submit,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: Colors.deepPurple,
+                    backgroundColor: const Color(0xFFc51f43),
                     foregroundColor: Colors.white,
                   ),
                   child: authState.isLoading

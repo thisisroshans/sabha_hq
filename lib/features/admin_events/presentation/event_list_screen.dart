@@ -54,7 +54,7 @@ class EventListScreen extends ConsumerWidget {
                       IconButton(
                         icon: const Icon(
                           Icons.qr_code,
-                          color: Colors.deepPurple,
+                          color: Color(0xFFc51f43),
                         ),
                         onPressed: () {
                           // Replace the SnackBar with the Dialog

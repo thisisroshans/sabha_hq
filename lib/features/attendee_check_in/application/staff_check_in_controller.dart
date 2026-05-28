@@ -59,14 +59,29 @@ class StaffCheckInController extends AutoDisposeNotifier<StaffCheckInState> {
     }
   }
 
-  Future<void> submitWalkIn(String eventId, String name) async {
+  Future<void> submitFullRegistration({
+    required String eventId,
+    required String name,
+    required String email,
+    required String companyName,
+    required String designation,
+    required String industry,
+  }) async {
     final phone = state.pendingPhone;
     if (phone == null) return;
 
     state = StaffCheckInState(step: CheckInStep.loading);
     try {
       final repo = ref.read(checkInRepositoryProvider);
-      final guest = await repo.registerWalkIn(eventId, phone, name);
+      final guest = await repo.registerFullWalkIn(
+        eventId: eventId,
+        phone: phone,
+        name: name,
+        email: email,
+        companyName: companyName,
+        designation: designation,
+        industry: industry,
+      );
 
       state = StaffCheckInState(
         step: CheckInStep.success,

@@ -49,7 +49,7 @@ class _AdminScaffoldState extends ConsumerState<AdminScaffold> {
           duration: const Duration(seconds: 4),
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.all(20),
-          backgroundColor: Colors.deepPurple,
+          backgroundColor: const Color(0xFFc51f43),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
@@ -127,25 +127,9 @@ class _AdminScaffoldState extends ConsumerState<AdminScaffold> {
               groupAlignment: -0.9,
               onDestinationSelected: (index) =>
                   _onDestinationSelected(context, index),
-              leading: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.event_available,
-                      size: 34,
-                      color: Colors.deepPurple,
-                    ),
-                    SizedBox(height: 10),
-                    Text(
-                      'Sabha HQ',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ],
-                ),
+              leading: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Image.asset('assets/logo.jpeg', height: 100),
               ),
               destinations: const [
                 NavigationRailDestination(

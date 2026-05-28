@@ -1,10 +1,115 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sabha_hq/core/models/attendee.dart';
+import 'package:web/web.dart' as web;
+import 'package:csv/csv.dart'; // Make sure this is imported!
+
 import '../application/guest_providers.dart';
 import '../../admin_events/application/event_providers.dart';
 
 class GuestManagementScreen extends ConsumerWidget {
   const GuestManagementScreen({super.key});
+
+  void _downloadCsvTemplate(BuildContext context) {
+    final List<List<dynamic>> csvData = [
+      [
+        'Name',
+        'Phone',
+        'Email',
+        'Role',
+        'Company',
+        'Designation',
+        'Industry',
+        'Checked In',
+        'Check-In Time',
+      ],
+    ];
+
+    final String csvContent = Csv().encode(csvData);
+    final bytes = utf8.encode(csvContent);
+    final base64data = base64Encode(bytes);
+    final anchor = web.HTMLAnchorElement()
+      ..href = 'data:text/csv;charset=utf-8;base64,$base64data'
+      ..download = 'sabha_guest_template.csv';
+
+    web.document.body?.append(anchor);
+    anchor.click();
+    anchor.remove();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Template downloaded!'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  void _exportGuestsToCsv(BuildContext context, List<Attendee> guests) {
+    if (guests.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No guests to export!'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final List<List<dynamic>> csvData = [
+        [
+          'Name',
+          'Phone',
+          'Email',
+          'Role',
+          'Company',
+          'Designation',
+          'Industry',
+          'Checked In',
+          'Check-In Time',
+        ],
+        ...guests.map(
+          (g) => [
+            g.name,
+            g.phone,
+            g.email,
+            g.role,
+            g.companyName,
+            g.designation,
+            g.industry,
+            g.isCheckedIn ? 'Yes' : 'No',
+            g.checkInTime?.toIso8601String() ?? 'N/A',
+          ],
+        ),
+      ];
+
+      final String csvContent = Csv().encode(csvData);
+      final bytes = utf8.encode(csvContent);
+      final base64data = base64Encode(bytes);
+      final anchor = web.HTMLAnchorElement()
+        ..href = 'data:text/csv;charset=utf-8;base64,$base64data'
+        ..download = 'sabha_guest_export.csv';
+
+      web.document.body?.append(anchor);
+      anchor.click();
+      anchor.remove();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Export successful!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to export: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   void _showAddGuestDialog(BuildContext context, WidgetRef ref) {
     final nameController = TextEditingController();
@@ -90,8 +195,9 @@ class GuestManagementScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. EVENT FILTER DROPDOWN & IMPORT BUTTON
+                // 1. EVENT FILTER DROPDOWN & IMPORT / EXPORT CONTROLS
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Expanded(
                       flex: 2,
@@ -99,16 +205,15 @@ class GuestManagementScreen extends ConsumerWidget {
                         loading: () => const CircularProgressIndicator(),
                         error: (e, _) => Text('Error: $e'),
                         data: (events) {
-                          if (events.isEmpty)
+                          if (events.isEmpty) {
                             return const Text('Create an event first.');
+                          }
 
-                          // 1. SAFETY CHECK: Does the selected ID actually exist in the current list?
                           final bool isValidSelection =
                               selectedEventId != null &&
                               events.any((e) => e.id == selectedEventId);
 
                           WidgetsBinding.instance.addPostFrameCallback((_) {
-                            // 2. If the ID is null OR invalid, reset it to the first valid event
                             if ((selectedEventId == null ||
                                     !isValidSelection) &&
                                 events.isNotEmpty) {
@@ -121,8 +226,9 @@ class GuestManagementScreen extends ConsumerWidget {
                           });
 
                           return DropdownButtonFormField<String>(
-                            // 3. Only pass the ID to the dropdown if we know it's in the list
-                            value: isValidSelection ? selectedEventId : null,
+                            initialValue: isValidSelection
+                                ? selectedEventId
+                                : null,
                             decoration: const InputDecoration(
                               labelText: 'Filter by Event',
                               border: OutlineInputBorder(),
@@ -146,10 +252,29 @@ class GuestManagementScreen extends ConsumerWidget {
                         },
                       ),
                     ),
-                    const SizedBox(width: 16),
-
-                    // ADD THIS: Bulk Import Button
-                    if (selectedEventId != null)
+                    if (selectedEventId != null) ...[
+                      const SizedBox(width: 16),
+                      TextButton.icon(
+                        icon: const Icon(Icons.download),
+                        label: const Text('Get Template'),
+                        onPressed: () => _downloadCsvTemplate(context),
+                      ),
+                      const SizedBox(width: 8),
+                      guestsState.maybeWhen(
+                        data: (guests) => OutlinedButton.icon(
+                          icon: const Icon(Icons.file_download),
+                          label: const Text('Export List'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 20,
+                            ),
+                          ),
+                          onPressed: () => _exportGuestsToCsv(context, guests),
+                        ),
+                        orElse: () => const SizedBox.shrink(),
+                      ),
+                      const SizedBox(width: 8),
                       ElevatedButton.icon(
                         icon: const Icon(Icons.upload_file),
                         label: const Text('Import CSV'),
@@ -159,7 +284,8 @@ class GuestManagementScreen extends ConsumerWidget {
                             vertical: 20,
                           ),
                         ),
-                        onPressed: actionState.isLoading
+                        onPressed:
+                            (actionState.isLoading || selectedEventId == 'all')
                             ? null
                             : () async {
                                 final count = await ref
@@ -189,6 +315,7 @@ class GuestManagementScreen extends ConsumerWidget {
                                 }
                               },
                       ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 24),

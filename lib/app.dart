@@ -11,7 +11,7 @@ class SabhaApp extends ConsumerWidget {
     final router = ref.watch(goRouterProvider);
 
     return MaterialApp.router(
-      title: 'Sabha HQ',
+      title: 'The Unpuzzle Project',
       debugShowCheckedModeBanner: false,
 
       // The router config handles all the URL parsing and navigation
@@ -19,7 +19,7 @@ class SabhaApp extends ConsumerWidget {
 
       // Default theme (Phase 4 will add dynamic branding overrides)
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFc51f43)),
         useMaterial3: true,
       ),
     );

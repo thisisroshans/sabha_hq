@@ -11,17 +11,22 @@ class CheckInScreen extends ConsumerStatefulWidget {
 }
 
 class _CheckInScreenState extends ConsumerState<CheckInScreen> {
+  // Persistent Controllers
   final _phoneController = TextEditingController();
   final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _companyController = TextEditingController();
+  final _designationController = TextEditingController();
+  final _industryController = TextEditingController();
 
-  // Focus nodes allow us to keep the cursor active without mouse clicks
+  // Focus Nodes
   final _phoneFocus = FocusNode();
   final _nameFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
-    // Auto-focus the phone field when the screen loads
+    // Auto-focus phone field after render frame
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _phoneFocus.requestFocus(),
     );
@@ -31,6 +36,10 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
   void dispose() {
     _phoneController.dispose();
     _nameController.dispose();
+    _emailController.dispose();
+    _companyController.dispose();
+    _designationController.dispose();
+    _industryController.dispose();
     _phoneFocus.dispose();
     _nameFocus.dispose();
     super.dispose();
@@ -39,8 +48,12 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
   void _resetForm() {
     _phoneController.clear();
     _nameController.clear();
+    _emailController.clear();
+    _companyController.clear();
+    _designationController.clear();
+    _industryController.clear();
     ref.read(staffCheckInProvider.notifier).reset();
-    _phoneFocus.requestFocus(); // Snap focus back to phone input for next guest
+    _phoneFocus.requestFocus(); // Snap focus back for next guest
   }
 
   @override
@@ -54,23 +67,39 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
     final uiState = ref.watch(staffCheckInProvider);
     final notifier = ref.read(staffCheckInProvider.notifier);
 
+    // Check screen width for responsive sizing
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
         title: const Text('Staff Check-In Terminal'),
         backgroundColor: const Color(0xFFc51f43),
         foregroundColor: Colors.white,
+        centerTitle: true,
       ),
-      body: Center(
-        child: Container(
-          width: 500,
-          padding: const EdgeInsets.all(40),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 20)],
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 16.0 : 32.0,
+              vertical: 24.0,
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 500),
+              child: Container(
+                padding: EdgeInsets.all(isMobile ? 20.0 : 40.0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black12, blurRadius: 20),
+                  ],
+                ),
+                child: _buildBody(uiState, notifier, widget.eventId!, isMobile),
+              ),
+            ),
           ),
-          child: _buildBody(uiState, notifier, widget.eventId!),
         ),
       ),
     );
@@ -80,40 +109,55 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
     StaffCheckInState uiState,
     StaffCheckInController notifier,
     String eventId,
+    bool isMobile,
   ) {
     // -------------------------------------------------------------
-    // SUCCESS SCREEN (Fast Reset)
+    // SUCCESS SCREEN
     // -------------------------------------------------------------
     if (uiState.step == CheckInStep.success) {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.check_circle, color: Colors.green[600], size: 100),
-          const SizedBox(height: 24),
+          Icon(
+            Icons.check_circle,
+            color: Colors.green[600],
+            size: isMobile ? 70 : 100,
+          ),
+          const SizedBox(height: 20),
           Text(
             uiState.isWelcomeBack
                 ? 'Already Checked In!'
                 : 'Check-In Successful!',
-            style: const TextStyle(fontSize: 20, color: Colors.grey),
+            style: TextStyle(
+              fontSize: isMobile ? 16 : 20,
+              color: Colors.grey[700],
+            ),
           ),
+          const SizedBox(height: 8),
           Text(
             uiState.checkedInGuest?.name ?? 'Guest',
-            style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: isMobile ? 26 : 36,
+              fontWeight: FontWeight.bold,
+            ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 32),
           SizedBox(
             width: double.infinity,
-            height: 60,
+            height: 52,
             child: ElevatedButton(
               onPressed: _resetForm,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               child: const Text(
-                'Next Guest (Enter)',
-                style: TextStyle(fontSize: 20),
+                'Next Guest',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -125,130 +169,117 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
     // WALK-IN FULL REGISTRATION SCREEN
     // -------------------------------------------------------------
     if (uiState.step == CheckInStep.needsWalkInName) {
-      // Create local controllers for the new fields (ensure you dispose these in the State class)
-      final emailController = TextEditingController();
-      final companyController = TextEditingController();
-      final designationController = TextEditingController();
-      final industryController = TextEditingController();
-
-      return SizedBox(
-        height: 600, // Constrain height so the form can scroll if needed
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'New Registration',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.deepPurple,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Phone: ${uiState.pendingPhone}',
-                style: const TextStyle(color: Colors.grey, fontSize: 16),
-              ),
-              const SizedBox(height: 24),
-
-              TextField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Full Name *',
-                  border: OutlineInputBorder(),
-                ),
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: 16),
-
-              TextField(
-                controller: emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email Address *',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: 16),
-
-              TextField(
-                controller: companyController,
-                decoration: const InputDecoration(
-                  labelText: 'Company Name',
-                  border: OutlineInputBorder(),
-                ),
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: 16),
-
-              TextField(
-                controller: designationController,
-                decoration: const InputDecoration(
-                  labelText: 'Designation / Title',
-                  border: OutlineInputBorder(),
-                ),
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: 16),
-
-              TextField(
-                controller: industryController,
-                decoration: const InputDecoration(
-                  labelText: 'Industry',
-                  border: OutlineInputBorder(),
-                ),
-                textInputAction: TextInputAction.done,
-              ),
-              const SizedBox(height: 32),
-
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: () {
-                    if (_nameController.text.trim().isEmpty ||
-                        emailController.text.trim().isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Name and Email are required.'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                      return;
-                    }
-
-                    notifier.submitFullRegistration(
-                      eventId: eventId,
-                      name: _nameController.text.trim(),
-                      email: emailController.text.trim(),
-                      companyName: companyController.text.trim(),
-                      designation: designationController.text.trim(),
-                      industry: industryController.text.trim(),
-                    );
-                  },
-                  child: const Text(
-                    'Complete Registration & Check In',
-                    style: TextStyle(fontSize: 16),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Center(
-                child: TextButton(
-                  onPressed: _resetForm,
-                  child: const Text('Cancel & Return to Search'),
-                ),
-              ),
-            ],
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'New Registration',
+            style: TextStyle(
+              fontSize: isMobile ? 20 : 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.deepPurple,
+            ),
           ),
-        ),
+          const SizedBox(height: 4),
+          Text(
+            'Phone: ${uiState.pendingPhone}',
+            style: const TextStyle(color: Colors.grey, fontSize: 14),
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _nameController,
+            focusNode: _nameFocus,
+            decoration: const InputDecoration(
+              labelText: 'Full Name *',
+              border: OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _emailController,
+            decoration: const InputDecoration(
+              labelText: 'Email Address *',
+              border: OutlineInputBorder(),
+            ),
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _companyController,
+            decoration: const InputDecoration(
+              labelText: 'Company Name',
+              border: OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _designationController,
+            decoration: const InputDecoration(
+              labelText: 'Designation / Title',
+              border: OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _industryController,
+            decoration: const InputDecoration(
+              labelText: 'Industry',
+              border: OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.done,
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepPurple,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: () {
+                if (_nameController.text.trim().isEmpty ||
+                    _emailController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Name and Email are required.'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                notifier.submitFullRegistration(
+                  eventId: eventId,
+                  name: _nameController.text.trim(),
+                  email: _emailController.text.trim(),
+                  companyName: _companyController.text.trim(),
+                  designation: _designationController.text.trim(),
+                  industry: _industryController.text.trim(),
+                );
+              },
+              child: const Text(
+                'Complete Registration & Check In',
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: TextButton(
+              onPressed: _resetForm,
+              child: const Text('Cancel & Return to Search'),
+            ),
+          ),
+        ],
       );
     }
 
@@ -261,21 +292,33 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
         if (uiState.step == CheckInStep.error) ...[
           Container(
             padding: const EdgeInsets.all(12),
-            color: Colors.red[50],
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.red[50],
+              borderRadius: BorderRadius.circular(8),
+            ),
             child: Text(
-              uiState.errorMessage ?? 'Error',
+              uiState.errorMessage ?? 'An unknown error occurred.',
               style: const TextStyle(color: Colors.red),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
         ],
-        const Icon(Icons.qr_code_scanner, size: 80, color: Color(0xFFc51f43)),
-        const SizedBox(height: 16),
-        const Text(
-          'Enter Attendee Phone Number',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+        Icon(
+          Icons.qr_code_scanner,
+          size: isMobile ? 60 : 80,
+          color: const Color(0xFFc51f43),
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 16),
+        Text(
+          'Enter Attendee Phone Number',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: isMobile ? 18 : 22,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 24),
         TextField(
           controller: _phoneController,
           focusNode: _phoneFocus,
@@ -293,7 +336,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
         const SizedBox(height: 24),
         SizedBox(
           width: double.infinity,
-          height: 60,
+          height: 52,
           child: ElevatedButton(
             onPressed: uiState.step == CheckInStep.loading
                 ? null
@@ -304,12 +347,22 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFc51f43),
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             child: uiState.step == CheckInStep.loading
-                ? const CircularProgressIndicator(color: Colors.white)
+                ? const SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2.5,
+                    ),
+                  )
                 : const Text(
                     'Search & Check In',
-                    style: TextStyle(fontSize: 20),
+                    style: TextStyle(fontSize: 18),
                   ),
           ),
         ),

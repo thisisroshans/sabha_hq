@@ -9,7 +9,7 @@ class EventListScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Watch the live stream of events from Firestore
+    // Watch the live stream of events from Firestore or relevant data source
     final eventsState = ref.watch(eventListProvider);
 
     return Scaffold(
@@ -57,7 +57,7 @@ class EventListScreen extends ConsumerWidget {
                           color: Color(0xFFc51f43),
                         ),
                         onPressed: () {
-                          // Replace the SnackBar with the Dialog
+                          // Opens QR Code Dialog
                           showDialog(
                             context: context,
                             builder: (context) => QrCodeDialog(event: event),

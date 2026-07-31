@@ -116,81 +116,134 @@ class _AdminScaffoldState extends ConsumerState<AdminScaffold> {
     final location = GoRouterState.of(context).matchedLocation;
     final selectedIndex = _getSelectedIndex(location);
 
-    return Scaffold(
-      body: SafeArea(
-        child: Row(
-          children: [
-            NavigationRail(
-              extended: true,
-              minExtendedWidth: 220,
-              selectedIndex: selectedIndex,
-              groupAlignment: -0.9,
-              onDestinationSelected: (index) =>
-                  _onDestinationSelected(context, index),
-              leading: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Image.asset('assets/logo.jpeg', height: 100),
-              ),
-              destinations: const [
-                NavigationRailDestination(
-                  icon: Icon(Icons.event_outlined),
-                  selectedIcon: Icon(Icons.event),
-                  label: Text('Events'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.people_outline),
-                  selectedIcon: Icon(Icons.people),
-                  label: Text('Guests'),
-                ),
-                NavigationRailDestination(
-                  icon: Badge(
-                    backgroundColor: Colors.redAccent,
-                    smallSize: 8,
-                    child: Icon(Icons.sensors),
-                  ),
-                  selectedIcon: Badge(
-                    backgroundColor: Colors.redAccent,
-                    child: Icon(Icons.sensors),
-                  ),
-                  label: Text('Live Feed'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.analytics_outlined),
-                  selectedIcon: Icon(Icons.analytics),
-                  label: Text('Analytics'),
-                ),
-              ],
-              trailing: Expanded(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 20),
-                    child: FilledButton.icon(
-                      icon: const Icon(Icons.logout),
-                      label: const Text('Logout'),
-                      onPressed: () async {
-                        await ref
-                            .read(authControllerProvider.notifier)
-                            .logout();
-                      },
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 800; // Breakpoint for mobile
+
+        return Scaffold(
+          // Mobile Bottom Navigation Bar
+          bottomNavigationBar: isMobile
+              ? NavigationBar(
+                  selectedIndex: selectedIndex,
+                  onDestinationSelected: (index) async {
+                    // Add Logout as the 5th item on mobile
+                    if (index == 4) {
+                      await ref.read(authControllerProvider.notifier).logout();
+                      return;
+                    }
+                    _onDestinationSelected(context, index);
+                  },
+                  destinations: const [
+                    NavigationDestination(
+                      icon: Icon(Icons.event_outlined),
+                      selectedIcon: Icon(Icons.event),
+                      label: 'Events',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.people_outline),
+                      selectedIcon: Icon(Icons.people),
+                      label: 'Guests',
+                    ),
+                    NavigationDestination(
+                      icon: Badge(
+                        backgroundColor: Colors.redAccent,
+                        smallSize: 8,
+                        child: Icon(Icons.sensors),
+                      ),
+                      label: 'Live',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.analytics_outlined),
+                      selectedIcon: Icon(Icons.analytics),
+                      label: 'Analytics',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.logout),
+                      label: 'Logout',
+                    ),
+                  ],
+                )
+              : null,
+          body: SafeArea(
+            child: Row(
+              children: [
+                // Desktop/Tablet Navigation Rail
+                if (!isMobile) ...[
+                  NavigationRail(
+                    extended:
+                        constraints.maxWidth >
+                        1000, // Collapse on medium screens
+                    minExtendedWidth: 220,
+                    selectedIndex: selectedIndex,
+                    groupAlignment: -0.9,
+                    onDestinationSelected: (index) =>
+                        _onDestinationSelected(context, index),
+                    leading: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      child: Image.asset('assets/logo.jpeg', height: 80),
+                    ),
+                    destinations: const [
+                      NavigationRailDestination(
+                        icon: Icon(Icons.event_outlined),
+                        selectedIcon: Icon(Icons.event),
+                        label: Text('Events'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.people_outline),
+                        selectedIcon: Icon(Icons.people),
+                        label: Text('Guests'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Badge(
+                          backgroundColor: Colors.redAccent,
+                          smallSize: 8,
+                          child: Icon(Icons.sensors),
+                        ),
+                        selectedIcon: Badge(
+                          backgroundColor: Colors.redAccent,
+                          child: Icon(Icons.sensors),
+                        ),
+                        label: Text('Live Feed'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.analytics_outlined),
+                        selectedIcon: Icon(Icons.analytics),
+                        label: Text('Analytics'),
+                      ),
+                    ],
+                    trailing: Expanded(
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 20),
+                          child: IconButton(
+                            icon: const Icon(Icons.logout),
+                            tooltip: 'Logout',
+                            onPressed: () async {
+                              await ref
+                                  .read(authControllerProvider.notifier)
+                                  .logout();
+                            },
+                          ),
+                        ),
+                      ),
                     ),
                   ),
+                  const VerticalDivider(width: 1),
+                ],
+
+                /// Main Screen Content
+                Expanded(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    child: widget.child,
+                  ),
                 ),
-              ),
+              ],
             ),
-
-            const VerticalDivider(width: 1),
-
-            /// Main Screen
-            Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                child: widget.child,
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

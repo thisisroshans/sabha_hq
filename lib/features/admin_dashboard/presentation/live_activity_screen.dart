@@ -25,113 +25,134 @@ class LiveActivityScreen extends ConsumerWidget {
           ],
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // EVENT FILTER DROPDOWN
-            SizedBox(
-              width: 400,
-              child: eventsState.when(
-                loading: () => const LinearProgressIndicator(),
-                error: (e, _) => Text('Error loading events: $e'),
-                data: (events) {
-                  final dropdownItems = [
-                    const DropdownMenuItem(
-                      value: 'all',
-                      child: Text('All Events (Global)'),
-                    ),
-                    ...events.map(
-                      (e) =>
-                          DropdownMenuItem(value: e.id, child: Text(e.title)),
-                    ),
-                  ];
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isMobile = constraints.maxWidth < 800;
 
-                  return DropdownButtonFormField<String>(
-                    initialValue:
-                        selectedFilter == 'all' ||
-                            events.any((e) => e.id == selectedFilter)
-                        ? selectedFilter
-                        : 'all',
-                    decoration: const InputDecoration(
-                      labelText: 'Filter Feed by Event',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.filter_list),
-                    ),
-                    items: dropdownItems,
-                    onChanged: (val) {
-                      if (val != null) {
-                        ref.read(liveFeedEventFilterProvider.notifier).state =
-                            val;
-                      }
+          return Padding(
+            padding: EdgeInsets.all(isMobile ? 16.0 : 24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // EVENT FILTER DROPDOWN
+                ConstrainedBox(
+                  // Use constraints instead of fixed SizedBox width
+                  constraints: const BoxConstraints(maxWidth: 400),
+                  child: eventsState.when(
+                    loading: () => const LinearProgressIndicator(),
+                    error: (e, _) => Text('Error loading events: $e'),
+                    data: (events) {
+                      final dropdownItems = [
+                        const DropdownMenuItem(
+                          value: 'all',
+                          child: Text('All Events (Global)'),
+                        ),
+                        ...events.map(
+                          (e) => DropdownMenuItem(
+                            value: e.id,
+                            child: Text(e.title),
+                          ),
+                        ),
+                      ];
+
+                      return DropdownButtonFormField<String>(
+                        isExpanded:
+                            true, // Prevents text overflow inside dropdown
+                        initialValue:
+                            selectedFilter == 'all' ||
+                                events.any((e) => e.id == selectedFilter)
+                            ? selectedFilter
+                            : 'all',
+                        decoration: const InputDecoration(
+                          labelText: 'Filter Feed by Event',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.filter_list),
+                        ),
+                        items: dropdownItems,
+                        onChanged: (val) {
+                          if (val != null) {
+                            ref
+                                    .read(liveFeedEventFilterProvider.notifier)
+                                    .state =
+                                val;
+                          }
+                        },
+                      );
                     },
-                  );
-                },
-              ),
+                  ),
+                ),
+                SizedBox(height: isMobile ? 16 : 24),
+
+                // SPLIT LIVE FEED LIST
+                Expanded(
+                  child: liveFeedState.when(
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (e, st) =>
+                        Center(child: Text('Error loading feed: $e')),
+                    data: (attendees) {
+                      final events = eventsState.valueOrNull ?? [];
+
+                      final guests = attendees
+                          .where((a) => a.role.toLowerCase() != 'participant')
+                          .toList();
+                      final participants = attendees
+                          .where((a) => a.role.toLowerCase() == 'participant')
+                          .toList();
+
+                      // Flex changes direction based on screen width
+                      return Flex(
+                        direction: isMobile ? Axis.vertical : Axis.horizontal,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // GUESTS
+                          Expanded(
+                            child: _buildColumn(
+                              title: 'Guests (${guests.length})',
+                              icon: Icons.person,
+                              color: Colors.green,
+                              attendees: guests,
+                              events: events,
+                              ref: ref,
+                            ),
+                          ),
+
+                          SizedBox(
+                            width: isMobile ? 0 : 24,
+                            height: isMobile ? 24 : 0,
+                          ),
+
+                          // PARTICIPANTS
+                          Expanded(
+                            child: _buildColumn(
+                              title: 'Participants (${participants.length})',
+                              icon: Icons.stars,
+                              color: Colors.deepPurple,
+                              attendees: participants,
+                              events: events,
+                              ref: ref,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 24),
-
-            // SPLIT LIVE FEED LIST
-            Expanded(
-              child: liveFeedState.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, st) => Center(child: Text('Error loading feed: $e')),
-                data: (attendees) {
-                  // Safely extract the events list to match IDs to titles
-                  final events = eventsState.valueOrNull ?? [];
-
-                  // Split the attendees into two separate lists
-                  final guests = attendees
-                      .where((a) => a.role.toLowerCase() != 'participant')
-                      .toList();
-                  final participants = attendees
-                      .where((a) => a.role.toLowerCase() == 'participant')
-                      .toList();
-
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // LEFT HALF: GUESTS
-                      Expanded(
-                        child: _buildColumn(
-                          title: 'Guests (${guests.length})',
-                          icon: Icons.person,
-                          color: Colors.green,
-                          attendees: guests,
-                          events: events,
-                        ),
-                      ),
-
-                      const SizedBox(width: 24), // Spacing between columns
-                      // RIGHT HALF: PARTICIPANTS
-                      Expanded(
-                        child: _buildColumn(
-                          title: 'Participants (${participants.length})',
-                          icon: Icons.stars,
-                          color: Colors.deepPurple,
-                          attendees: participants,
-                          events: events,
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
-  // Helper method to build each column (Guests or Participants)
   Widget _buildColumn({
     required String title,
     required IconData icon,
     required Color color,
     required List<Attendee> attendees,
-    required List<dynamic> events, // Or List<Event> if imported properly
+    required List<dynamic> events,
+    required WidgetRef ref,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -147,12 +168,15 @@ class LiveActivityScreen extends ConsumerWidget {
             children: [
               Icon(icon, color: color),
               const SizedBox(width: 8),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: color,
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -170,12 +194,22 @@ class LiveActivityScreen extends ConsumerWidget {
                   ),
                 )
               : Card(
-                  child: ListView.separated(
-                    itemCount: attendees.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      return _buildAttendeeTile(attendees[index], events);
+                  margin: EdgeInsets.zero,
+                  child: NotificationListener<ScrollEndNotification>(
+                    onNotification: (scrollInfo) {
+                      if (scrollInfo.metrics.pixels >=
+                          scrollInfo.metrics.maxScrollExtent) {
+                        ref.read(liveFeedLimitProvider.notifier).state += 25;
+                      }
+                      return true;
                     },
+                    child: ListView.separated(
+                      itemCount: attendees.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        return _buildAttendeeTile(attendees[index], events);
+                      },
+                    ),
                   ),
                 ),
         ),
@@ -183,9 +217,7 @@ class LiveActivityScreen extends ConsumerWidget {
     );
   }
 
-  // Helper method extracted from your previous code to keep things DRY
   Widget _buildAttendeeTile(Attendee guest, List<dynamic> events) {
-    // 1. Format Time & Date
     final timeString = guest.checkInTime != null
         ? DateFormat('h:mm a').format(guest.checkInTime!)
         : 'Just now';
@@ -193,28 +225,27 @@ class LiveActivityScreen extends ConsumerWidget {
         ? DateFormat('MMM d, yyyy').format(guest.checkInTime!)
         : 'Today';
 
-    // 2. Get the Event Name
     final matchingEvent = events
         .where((e) => e.id == guest.eventId)
         .firstOrNull;
     final eventTitle = matchingEvent?.title ?? 'Unknown Event';
 
-    // 3. Format the Role string properly
     final roleDisplay = guest.role.isNotEmpty
         ? '${guest.role[0].toUpperCase()}${guest.role.substring(1).toLowerCase()}'
         : 'Guest';
 
     return ListTile(
       isThreeLine: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: CircleAvatar(
         backgroundColor: guest.role.toLowerCase() == 'participant'
             ? Colors.deepPurple
             : Colors.green,
-        child: const Icon(Icons.how_to_reg, color: Colors.white),
+        child: const Icon(Icons.how_to_reg, color: Colors.white, size: 20),
       ),
       title: RichText(
         text: TextSpan(
-          style: const TextStyle(fontSize: 16, color: Colors.black87),
+          style: const TextStyle(fontSize: 15, color: Colors.black87),
           children: [
             TextSpan(
               text: '$roleDisplay ',
@@ -240,6 +271,7 @@ class LiveActivityScreen extends ConsumerWidget {
               style: const TextStyle(
                 color: Colors.black87,
                 fontWeight: FontWeight.w500,
+                fontSize: 13,
               ),
             ),
             const SizedBox(height: 4),
@@ -247,6 +279,7 @@ class LiveActivityScreen extends ConsumerWidget {
               guest.companyName.isNotEmpty
                   ? '$dateString • ${guest.companyName} (${guest.phone})'
                   : '$dateString • ${guest.phone}',
+              style: const TextStyle(fontSize: 12),
             ),
           ],
         ),
@@ -260,7 +293,7 @@ class LiveActivityScreen extends ConsumerWidget {
             style: const TextStyle(
               color: Colors.green,
               fontWeight: FontWeight.bold,
-              fontSize: 14,
+              fontSize: 13,
             ),
           ),
           const SizedBox(height: 4),

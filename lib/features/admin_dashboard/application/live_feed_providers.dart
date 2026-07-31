@@ -40,3 +40,57 @@ final liveActivityStreamProvider = StreamProvider.autoDispose<List<Attendee>>((
         }).toList();
       });
 });
+// Controls how many records to fetch. Starts at 25.
+final liveFeedLimitProvider = StateProvider<int>((ref) => 25);
+
+final participantsStreamProvider = StreamProvider.autoDispose<List<Attendee>>((
+  ref,
+) {
+  final eventId = ref.watch(liveFeedEventFilterProvider);
+  final currentLimit = ref.watch(
+    liveFeedLimitProvider,
+  ); // Watch the dynamic limit
+
+  Query query = eventId == 'all'
+      ? FirebaseFirestore.instance.collectionGroup('attendees')
+      : FirestoreRefs.attendees(eventId);
+
+  return query
+      .where('isCheckedIn', isEqualTo: true)
+      .where('role', isEqualTo: 'participant')
+      .orderBy('checkInTime', descending: true)
+      .limit(currentLimit) // Use the dynamic limit here
+      .snapshots()
+      .map(
+        (snapshot) => snapshot.docs.map((doc) {
+          final data = doc.data();
+          if (data is Attendee) return data;
+          return Attendee.fromMap(data as Map<String, dynamic>, doc.id);
+        }).toList(),
+      );
+});
+
+final guestsStreamProvider = StreamProvider.autoDispose<List<Attendee>>((ref) {
+  final eventId = ref.watch(liveFeedEventFilterProvider);
+  final currentLimit = ref.watch(
+    liveFeedLimitProvider,
+  ); // Watch the dynamic limit
+
+  Query query = eventId == 'all'
+      ? FirebaseFirestore.instance.collectionGroup('attendees')
+      : FirestoreRefs.attendees(eventId);
+
+  return query
+      .where('isCheckedIn', isEqualTo: true)
+      .where('role', isNotEqualTo: 'participant')
+      .orderBy('checkInTime', descending: true)
+      .limit(currentLimit) // Use the dynamic limit here
+      .snapshots()
+      .map(
+        (snapshot) => snapshot.docs.map((doc) {
+          final data = doc.data();
+          if (data is Attendee) return data;
+          return Attendee.fromMap(data as Map<String, dynamic>, doc.id);
+        }).toList(),
+      );
+});

@@ -130,9 +130,7 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
                     child: const Text('Change Date'),
                   ),
                 ),
-
                 const Divider(height: 48),
-
                 const Text(
                   'Attendee App Branding',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -150,7 +148,6 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
                       : 'Must be a valid hex code (e.g. #FF0000)',
                 ),
                 const SizedBox(height: 32),
-
                 ElevatedButton(
                   onPressed: actionState.isLoading ? null : _submit,
                   style: ElevatedButton.styleFrom(

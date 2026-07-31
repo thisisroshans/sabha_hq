@@ -37,7 +37,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
   Future<void> _submit() async {
     if (_formKey.currentState!.validate() && _selectedDate != null) {
-      // Wait for the boolean result
+      // Wait for the boolean result from the controller
       final success = await ref
           .read(eventActionControllerProvider.notifier)
           .createNewEvent(
@@ -52,7 +52,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         // If successful, navigate away (this destroys the screen and clears the form)
         context.go('/dashboard/events');
       } else {
-        // If it failed, show the error message so you aren't guessing
+        // If it failed, show the error message
         final errorState = ref.read(eventActionControllerProvider).error;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -93,7 +93,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       value != null && value.isNotEmpty ? null : 'Required',
                 ),
                 const SizedBox(height: 16),
-
                 TextFormField(
                   controller: _locationController,
                   decoration: const InputDecoration(
@@ -104,7 +103,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       value != null && value.isNotEmpty ? null : 'Required',
                 ),
                 const SizedBox(height: 16),
-
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(
@@ -118,7 +116,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
-
                 ElevatedButton(
                   onPressed: actionState.isLoading ? null : _submit,
                   style: ElevatedButton.styleFrom(

@@ -16,7 +16,6 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Fetch available events for the dropdown
     final eventsState = ref.watch(eventListProvider);
 
     return Scaffold(
@@ -29,44 +28,67 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
             return const Center(child: Text('No events found.'));
           }
 
-          // Auto-select the first event if none is selected
           _selectedEventId ??= events.first.id;
 
-          return Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // EVENT SELECTOR
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedEventId,
-                  decoration: const InputDecoration(
-                    labelText: 'Select Event to Analyze',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: events.map((e) {
-                    return DropdownMenuItem(value: e.id, child: Text(e.title));
-                  }).toList(),
-                  onChanged: (val) => setState(() => _selectedEventId = val),
-                ),
-                const SizedBox(height: 32),
+          // 1. Wrap the body in a LayoutBuilder to detect screen width
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              // Define a breakpoint for mobile vs web (600px is standard)
+              final isDesktop = constraints.maxWidth > 600;
 
-                // METRICS & CHART
-                Expanded(
-                  child: _selectedEventId == null
-                      ? const SizedBox.shrink()
-                      : _buildMetricsDashboard(_selectedEventId!),
+              return Padding(
+                // Dynamic padding: smaller for mobile, larger for web
+                padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // EVENT SELECTOR
+                    SizedBox(
+                      // Limit width on desktop so it doesn't stretch across the whole screen
+                      width: isDesktop ? 400 : double.infinity,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _selectedEventId,
+                        decoration: const InputDecoration(
+                          labelText: 'Select Event to Analyze',
+                          border: OutlineInputBorder(),
+                        ),
+                        isExpanded:
+                            true, // Prevents text overflow on small screens
+                        items: events.map((e) {
+                          return DropdownMenuItem(
+                            value: e.id,
+                            child: Text(
+                              e.title,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) =>
+                            setState(() => _selectedEventId = val),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+
+                    // METRICS & CHART
+                    Expanded(
+                      child: _selectedEventId == null
+                          ? const SizedBox.shrink()
+                          : _buildMetricsDashboard(
+                              _selectedEventId!,
+                              isDesktop,
+                            ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           );
         },
       ),
     );
   }
 
-  Widget _buildMetricsDashboard(String eventId) {
-    // 2. Fetch and calculate metrics for the selected event
+  Widget _buildMetricsDashboard(String eventId, bool isDesktop) {
     final metricsState = ref.watch(eventMetricsProvider(eventId));
 
     return metricsState.when(
@@ -79,79 +101,94 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
           );
         }
 
-        return Row(
+        // 2. Extract Chart into a reusable widget
+        Widget chartWidget = Stack(
+          alignment: Alignment.center,
           children: [
-            // PIE CHART
-            Expanded(
-              flex: 1,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  PieChart(
-                    PieChartData(
-                      sectionsSpace: 2,
-                      centerSpaceRadius: 60,
-                      sections: [
-                        PieChartSectionData(
-                          value: metrics.totalCheckedIn.toDouble(),
-                          color: Colors.green,
-                          title:
-                              '${((metrics.totalCheckedIn / metrics.totalRegistered) * 100).toStringAsFixed(0)}%',
-                          radius: 50,
-                          titleStyle: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        PieChartSectionData(
-                          value: metrics.pending.toDouble(),
-                          color: Colors.grey[300],
-                          title: '', // Hide label for pending
-                          radius: 50,
-                        ),
-                      ],
+            PieChart(
+              PieChartData(
+                sectionsSpace: 2,
+                centerSpaceRadius: isDesktop
+                    ? 60
+                    : 50, // Slightly smaller on mobile
+                sections: [
+                  PieChartSectionData(
+                    value: metrics.totalCheckedIn.toDouble(),
+                    color: Colors.green,
+                    title:
+                        '${((metrics.totalCheckedIn / metrics.totalRegistered) * 100).toStringAsFixed(0)}%',
+                    radius: isDesktop ? 50 : 40,
+                    titleStyle: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                   ),
-                  Text(
-                    '${metrics.totalCheckedIn}\nChecked In',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
+                  PieChartSectionData(
+                    value: metrics.pending.toDouble(),
+                    color: Colors.grey[300],
+                    title: '',
+                    radius: isDesktop ? 50 : 40,
                   ),
                 ],
               ),
             ),
-
-            // STATS CARDS
-            Expanded(
-              flex: 1,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _StatTile(
-                    title: 'Total Registered',
-                    value: metrics.totalRegistered,
-                    icon: Icons.people,
-                  ),
-                  _StatTile(
-                    title: 'Guests',
-                    value: metrics.guests,
-                    icon: Icons.person_outline,
-                  ),
-                  _StatTile(
-                    title: 'Participants',
-                    value: metrics.participants,
-                    icon: Icons.star_border,
-                  ),
-                ],
+            Text(
+              '${metrics.totalCheckedIn}\nChecked In',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: isDesktop ? 16 : 14,
               ),
             ),
           ],
         );
+
+        // 3. Extract Stats into a reusable widget
+        Widget statsWidget = Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _StatTile(
+              title: 'Total Registered',
+              value: metrics.totalRegistered,
+              icon: Icons.people,
+            ),
+            _StatTile(
+              title: 'Guests',
+              value: metrics.guests,
+              icon: Icons.person_outline,
+            ),
+            _StatTile(
+              title: 'Participants',
+              value: metrics.participants,
+              icon: Icons.star_border,
+            ),
+          ],
+        );
+
+        // 4. Return Row for Desktop, Scrollable Column for Mobile
+        if (isDesktop) {
+          return Row(
+            children: [
+              Expanded(flex: 1, child: chartWidget),
+              const SizedBox(width: 32),
+              Expanded(flex: 1, child: statsWidget),
+            ],
+          );
+        } else {
+          return SingleChildScrollView(
+            child: Column(
+              children: [
+                // fl_chart requires bounded height in a Column
+                SizedBox(height: 250, child: chartWidget),
+                const SizedBox(height: 32),
+                statsWidget,
+                const SizedBox(height: 32), // Bottom padding for scrolling
+              ],
+            ),
+          );
+        }
       },
     );
   }

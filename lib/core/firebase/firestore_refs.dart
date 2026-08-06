@@ -26,6 +26,12 @@ class FirestoreRefs {
             return json;
           },
         );
+  } // ==========================================
+
+  // EVENT DOCUENT FOR given id
+  // ==========================================
+  static DocumentReference<Event> event(String docId) {
+    return events().doc(docId);
   }
 
   // ==========================================

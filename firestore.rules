@@ -1,18 +1,56 @@
-rules_version='2'
+rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Admins sign in with email/password (see admin_auth/data/auth_repository.dart,
+    // router redirect uses user.email != null). Guests get a silent, no-UI
+    // anonymous session the moment they open the check-in screen (see
+    // attendee_check_in/application/phone_auth_controller.dart's
+    // GuestAuthController) — no OTP, no credential the guest sets up
+    // themselves, so the sign-in provider cleanly tells the two apart.
+    function isAdmin() {
+      return request.auth != null &&
+        request.auth.token.firebase.sign_in_provider == 'password';
+    }
+
+    function isGuestSession() {
+      return request.auth != null &&
+        request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+
+    match /events/{eventId} {
+      // Event details (title/date/location/branding) are needed by the
+      // public check-in screen before the guest is authenticated, so reads
+      // stay open. Only admins manage events.
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+
+      match /attendees/{attendeeId} {
+        // The live roster (this event's Guest Activity screen + admin live
+        // feed) is readable by any authenticated party — admin or a
+        // checked-in guest session.
+        allow read: if isAdmin() || isGuestSession();
+
+        // Admins manage the guest list freely (bulk import, edits, deletes).
+        // Guest sessions are anonymous (no verified phone/identity claim),
+        // so — same as before OTP was added — there's no way to scope a
+        // write to "only your own record"; any active guest session may
+        // search/check-in/register a walk-in, but never delete.
+        allow create, update: if isAdmin() || isGuestSession();
+        allow delete: if isAdmin();
+      }
+
+      match /feedback/{feedbackId} {
+        allow read: if isAdmin();
+        allow create: if isAdmin() || isGuestSession();
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // Deny everything else by default.
     match /{document=**} {
-      // This rule allows anyone with your database reference to view, edit,
-      // and delete all data in your database. It is useful for getting
-      // started, but it is configured to expire after 30 days because it
-      // leaves your app open to attackers. At that time, all client
-      // requests to your database will be denied.
-      //
-      // Make sure to write security rules for your app before that time, or
-      // else all client requests to your database will be denied until you
-      // update your rules.
-      allow read, write: if request.time < timestamp.date(2026, 6, 19);
+      allow read, write: if false;
     }
   }
 }

@@ -70,9 +70,7 @@ class QrCodeDialog extends StatelessWidget {
 
       // Append -> Click -> Remove
       web.document.body?.append(anchor);
-
       anchor.click();
-
       anchor.remove();
 
       // Cleanup memory
@@ -120,104 +118,135 @@ class QrCodeDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      child: AlertDialog(
-        title: Text(
-          'Check-In: ${event.title}',
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
+    final screenSize = MediaQuery.of(context).size;
+    final isMobile = screenSize.width < 600;
 
-        content: SizedBox(
-          width: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: QrImageView(
-                  data: _checkInUrl,
-                  version: QrVersions.auto,
-                  size: 300,
-                  eyeStyle: const QrEyeStyle(
-                    eyeShape: QrEyeShape.square,
-                    color: Color(0xFFc51f43),
+    // Scale QR size dynamically based on screen width
+    final qrSize = isMobile
+        ? (screenSize.width * 0.55).clamp(180.0, 240.0)
+        : 280.0;
+
+    return Dialog(
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 16.0 : 40.0,
+        vertical: 24.0,
+      ),
+
+      child: SizedBox(
+        width: isMobile ? 400 : 450,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Check-In: ${event.title}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: isMobile ? 18 : 20,
                   ),
-                  dataModuleStyle: const QrDataModuleStyle(
-                    dataModuleShape: QrDataModuleShape.square,
-                    color: Color(0xFFc51f43),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: EdgeInsets.all(isMobile ? 12 : 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300),
                   ),
-                  backgroundColor: Colors.white,
+                  child: QrImageView(
+                    data: _checkInUrl,
+                    version: QrVersions.auto,
+                    size: qrSize,
+                    eyeStyle: const QrEyeStyle(
+                      eyeShape: QrEyeShape.square,
+                      color: Color(0xFFc51f43),
+                    ),
+                    dataModuleStyle: const QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.square,
+                      color: Color(0xFFc51f43),
+                    ),
+                    backgroundColor: Colors.white,
+                  ),
                 ),
-              ),
 
-              const SizedBox(height: 20),
+                const SizedBox(height: 16),
 
-              const Text(
-                'Attendees can scan this QR at the venue\n'
-                'or you can share the check-in link directly.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, height: 1.4),
-              ),
-
-              const SizedBox(height: 20),
-
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
+                Text(
+                  'Attendees can scan this QR at the venue\n'
+                  'or you can share the check-in link directly.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey[700],
+                    fontSize: isMobile ? 12 : 14,
+                    height: 1.4,
+                  ),
                 ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF5F5F5),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE0E0E0)),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: SelectableText(
-                        _checkInUrl,
-                        maxLines: 1,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black87,
+
+                const SizedBox(height: 16),
+
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF5F5F5),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFE0E0E0)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: SelectableText(
+                          _checkInUrl,
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: isMobile ? 11 : 12,
+                            color: Colors.black87,
+                          ),
                         ),
                       ),
-                    ),
-
-                    IconButton(
-                      tooltip: 'Copy Link',
-                      icon: const Icon(
-                        Icons.copy,
-                        size: 20,
-                        color: Color(0xFFc51f43),
+                      IconButton(
+                        tooltip: 'Copy Link',
+                        icon: const Icon(
+                          Icons.copy,
+                          size: 18,
+                          color: Color(0xFFc51f43),
+                        ),
+                        onPressed: () => _copyLink(context),
                       ),
-                      onPressed: () => _copyLink(context),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => _downloadQrCode(context),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFFc51f43),
+                        ),
+                        icon: const Icon(Icons.download, size: 18),
+                        label: const Text('Download QR'),
+                      ),
+                    ),
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Close'),
+                      ),
                     ),
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-
-        actions: [
-          FilledButton.icon(
-            onPressed: () => _downloadQrCode(context),
-            icon: const Icon(Icons.download),
-            label: const Text('Download QR'),
-          ),
-
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
       ),
     );
   }

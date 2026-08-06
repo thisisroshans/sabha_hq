@@ -40,6 +40,22 @@ final liveActivityStreamProvider = StreamProvider.autoDispose<List<Attendee>>((
         }).toList();
       });
 });
+
+// Scoped to a single event (used by the attendee-facing Guest Activity
+// screen after check-in) — independent of the admin dashboard's global
+// liveFeedEventFilterProvider so it never fights over shared state.
+final eventAttendeesStreamProvider = StreamProvider.autoDispose
+    .family<List<Attendee>, String>((ref, eventId) {
+      return FirestoreRefs.attendees(eventId)
+          .where('isCheckedIn', isEqualTo: true)
+          .orderBy('checkInTime', descending: true)
+          .limit(ref.watch(liveFeedLimitProvider))
+          .snapshots()
+          .map(
+            (snapshot) => snapshot.docs.map((doc) => doc.data()).toList(),
+          );
+    });
+
 // Controls how many records to fetch. Starts at 25.
 final liveFeedLimitProvider = StateProvider<int>((ref) => 25);
 

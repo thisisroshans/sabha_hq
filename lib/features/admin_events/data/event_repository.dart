@@ -15,6 +15,18 @@ class EventRepository {
         .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
   }
 
+  /// Stream a single event
+  Stream<Event?> watchEvent(String eventId) {
+    return FirestoreRefs.event(
+      eventId,
+    ).snapshots().map((snapshot) => snapshot.data());
+  }
+
+  Future<Event?> getEvent(String eventId) async {
+    final snapshot = await FirestoreRefs.event(eventId).get();
+    return snapshot.data();
+  }
+
   /// Create a new event.
   /// We generate a Firestore document reference first to get the unique ID.
   Future<void> createEvent(Event event) async {

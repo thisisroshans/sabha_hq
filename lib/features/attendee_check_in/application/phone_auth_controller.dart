@@ -1,102 +1,39 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sabha_hq/core/models/attendee.dart';
-import '../data/check_in_repository.dart';
 
-// State definition to track where we are in the flow
-class PhoneAuthState {
-  final bool isLoading;
-  final String? error;
-  final ConfirmationResult? confirmationResult;
-  final Attendee? checkedInAttendee;
-
-  PhoneAuthState({
-    this.isLoading = false,
-    this.error,
-    this.confirmationResult,
-    this.checkedInAttendee,
-  });
-
-  PhoneAuthState copyWith({
-    bool? isLoading,
-    String? error,
-    ConfirmationResult? confirmationResult,
-    Attendee? checkedInAttendee,
-    bool clearError = false,
-  }) {
-    return PhoneAuthState(
-      isLoading: isLoading ?? this.isLoading,
-      error: clearError ? null : (error ?? this.error),
-      confirmationResult: confirmationResult ?? this.confirmationResult,
-      checkedInAttendee: checkedInAttendee ?? this.checkedInAttendee,
-    );
-  }
-}
-
-final phoneAuthControllerProvider =
-    NotifierProvider.autoDispose<PhoneAuthController, PhoneAuthState>(
-      PhoneAuthController.new,
+final guestAuthControllerProvider =
+    NotifierProvider.autoDispose<GuestAuthController, AsyncValue<void>>(
+      GuestAuthController.new,
     );
 
-class PhoneAuthController extends AutoDisposeNotifier<PhoneAuthState> {
+/// Ensures the kiosk has an active Firebase Auth session before any
+/// check-in read/write hits Firestore (rules require request.auth != null).
+/// No OTP, no UI — the guest never sees this, it's a silent anonymous
+/// sign-in that happens the moment they try to check in.
+class GuestAuthController extends AutoDisposeNotifier<AsyncValue<void>> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  String _currentPhone = '';
 
   @override
-  PhoneAuthState build() => PhoneAuthState();
+  AsyncValue<void> build() => const AsyncValue.data(null);
 
-  // STEP 1: Send the SMS
-  Future<void> sendOtp(String phoneNumber) async {
-    state = state.copyWith(isLoading: true, clearError: true);
+  Future<bool> ensureSignedIn() async {
+    if (_auth.currentUser != null) return true;
+
+    state = const AsyncValue.loading();
     try {
-      // Ensure it has the country code (e.g., +91 for India, +1 for US)
-      if (!phoneNumber.startsWith('+')) {
-        throw Exception('Please include country code (e.g., +91)');
-      }
-
-      _currentPhone = phoneNumber;
-
-      // Flutter Web uses signInWithPhoneNumber for OTP sending
-      final confirmation = await _auth.signInWithPhoneNumber(phoneNumber);
-
-      state = state.copyWith(
-        isLoading: false,
-        confirmationResult: confirmation, // Move to OTP input screen
-      );
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      await _auth.signInAnonymously();
+      state = const AsyncValue.data(null);
+      return true;
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return false;
     }
   }
 
-  // STEP 2: Verify the Code and Check In
-  Future<void> verifyOtpAndCheckIn(String eventId, String smsCode) async {
-    state = state.copyWith(isLoading: true, clearError: true);
-    try {
-      if (state.confirmationResult == null) {
-        throw Exception('Session expired. Try again.');
-      }
-
-      // 1. Authenticate with Firebase
-      await state.confirmationResult!.confirm(smsCode);
-
-      // 2. Query Firestore and update the guest list
-      final repository = ref.read(checkInRepositoryProvider);
-      final attendee = await repository.searchAndCheckIn(
-        eventId,
-        _currentPhone,
-      );
-
-      // 3. Success! Move to the welcome screen
-      state = state.copyWith(isLoading: false, checkedInAttendee: attendee);
-    } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: 'Invalid OTP or not on guest list.',
-      );
-    }
-  }
-
-  void reset() {
-    state = PhoneAuthState();
+  Future<void> reset() async {
+    // Kiosk device: clear this guest's session so the next person doesn't
+    // inherit their auth state.
+    await _auth.signOut();
+    state = const AsyncValue.data(null);
   }
 }

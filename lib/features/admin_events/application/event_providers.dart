@@ -14,6 +14,14 @@ final eventListProvider = StreamProvider.autoDispose<List<Event>>((ref) {
   return repository.watchAllEvents();
 });
 
+final eventProvider = StreamProvider.autoDispose.family<Event?, String>((
+  ref,
+  eventId,
+) {
+  final repository = ref.watch(eventRepositoryProvider);
+  return repository.watchEvent(eventId);
+});
+
 // =================================================================
 // 2. FORM ACTION CONTROLLER
 // Handles the business logic and loading state for creating events.

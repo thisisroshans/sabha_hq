@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sabha_hq/features/attendee_check_in/presentation/guest_activity_screen.dart';
+import '../application/phone_auth_controller.dart';
 import '../application/staff_check_in_controller.dart';
 
 class CheckInScreen extends ConsumerStatefulWidget {
@@ -19,17 +22,18 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
   final _designationController = TextEditingController();
   final _industryController = TextEditingController();
 
-  // Focus Nodes
   final _phoneFocus = FocusNode();
   final _nameFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
-    // Auto-focus phone field after render frame
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _phoneFocus.requestFocus(),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _phoneFocus.requestFocus();
+      // Silent, no-UI auth so Firestore rules (request.auth != null) are
+      // satisfied by the time the guest submits their phone number.
+      ref.read(guestAuthControllerProvider.notifier).ensureSignedIn();
+    });
   }
 
   @override
@@ -53,7 +57,16 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
     _designationController.clear();
     _industryController.clear();
     ref.read(staffCheckInProvider.notifier).reset();
-    _phoneFocus.requestFocus(); // Snap focus back for next guest
+    _phoneFocus.requestFocus();
+  }
+
+  Future<void> _submitPhone(String eventId, String phone) async {
+    if (phone.isEmpty) return;
+    final signedIn = await ref
+        .read(guestAuthControllerProvider.notifier)
+        .ensureSignedIn();
+    if (!signedIn || !mounted) return;
+    ref.read(staffCheckInProvider.notifier).submitPhone(eventId, phone);
   }
 
   @override
@@ -64,16 +77,37 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
       );
     }
 
+    // ------------------------------------------------------------------
+    // NAVIGATION LISTENER: Watch for successful check-in
+    // ------------------------------------------------------------------
+    ref.listen<StaffCheckInState>(staffCheckInProvider, (previous, next) {
+      if (next.step == CheckInStep.success) {
+        // Optional: Add a small delay so they see the success checkmark
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (!context.mounted) return;
+
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => GuestActivityScreen(
+                eventId: widget.eventId!,
+                guestName: next.checkedInGuest?.name ?? 'Guest',
+              ),
+            ),
+          );
+        });
+      }
+    });
+
     final uiState = ref.watch(staffCheckInProvider);
     final notifier = ref.read(staffCheckInProvider.notifier);
+    final guestAuthState = ref.watch(guestAuthControllerProvider);
 
-    // Check screen width for responsive sizing
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('Staff Check-In Terminal'),
+        title: const Text('Event Check-In'),
         backgroundColor: const Color(0xFFc51f43),
         foregroundColor: Colors.white,
         centerTitle: true,
@@ -96,7 +130,13 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                     BoxShadow(color: Colors.black12, blurRadius: 20),
                   ],
                 ),
-                child: _buildBody(uiState, notifier, widget.eventId!, isMobile),
+                child: _buildBody(
+                  uiState,
+                  notifier,
+                  guestAuthState,
+                  widget.eventId!,
+                  isMobile,
+                ),
               ),
             ),
           ),
@@ -108,11 +148,12 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
   Widget _buildBody(
     StaffCheckInState uiState,
     StaffCheckInController notifier,
+    AsyncValue<void> guestAuthState,
     String eventId,
     bool isMobile,
   ) {
     // -------------------------------------------------------------
-    // SUCCESS SCREEN
+    // SUCCESS SCREEN (Redirecting State)
     // -------------------------------------------------------------
     if (uiState.step == CheckInStep.success) {
       return Column(
@@ -125,9 +166,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
           ),
           const SizedBox(height: 20),
           Text(
-            uiState.isWelcomeBack
-                ? 'Already Checked In!'
-                : 'Check-In Successful!',
+            uiState.isWelcomeBack ? 'Welcome Back!' : 'Check-In Successful!',
             style: TextStyle(
               fontSize: isMobile ? 16 : 20,
               color: Colors.grey[700],
@@ -143,23 +182,11 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: ElevatedButton(
-              onPressed: _resetForm,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text(
-                'Next Guest',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
+          const CircularProgressIndicator(color: Color(0xFFc51f43)),
+          const SizedBox(height: 16),
+          const Text(
+            'Taking you to the live event...',
+            style: TextStyle(color: Colors.grey),
           ),
         ],
       );
@@ -267,7 +294,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                 );
               },
               child: const Text(
-                'Complete Registration & Check In',
+                'Register & Check In',
                 style: TextStyle(fontSize: 16),
               ),
             ),
@@ -276,12 +303,19 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
           Center(
             child: TextButton(
               onPressed: _resetForm,
-              child: const Text('Cancel & Return to Search'),
+              child: const Text('Cancel'),
             ),
           ),
         ],
       );
     }
+
+    final isBusy =
+        guestAuthState.isLoading || uiState.step == CheckInStep.loading;
+    final errorText =
+        guestAuthState.hasError
+            ? 'Could not connect. Please try again.'
+            : uiState.errorMessage;
 
     // -------------------------------------------------------------
     // DEFAULT SEARCH SCREEN
@@ -289,7 +323,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (uiState.step == CheckInStep.error) ...[
+        if (uiState.step == CheckInStep.error || guestAuthState.hasError) ...[
           Container(
             padding: const EdgeInsets.all(12),
             width: double.infinity,
@@ -298,7 +332,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              uiState.errorMessage ?? 'An unknown error occurred.',
+              errorText ?? 'An unknown error occurred.',
               style: const TextStyle(color: Colors.red),
             ),
           ),
@@ -311,7 +345,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          'Enter Attendee Phone Number',
+          'Enter Your Phone Number',
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: isMobile ? 18 : 22,
@@ -326,24 +360,22 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
             labelText: 'Phone Number',
             border: OutlineInputBorder(),
             prefixIcon: Icon(Icons.phone),
+            counterText: '',
           ),
-          keyboardType: TextInputType.phone,
+          keyboardType: TextInputType.number,
           textInputAction: TextInputAction.search,
-          onSubmitted: (val) {
-            if (val.isNotEmpty) notifier.submitPhone(eventId, val);
-          },
+          maxLength: 10,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          onSubmitted: (val) => _submitPhone(eventId, val.trim()),
         ),
         const SizedBox(height: 24),
         SizedBox(
           width: double.infinity,
           height: 52,
           child: ElevatedButton(
-            onPressed: uiState.step == CheckInStep.loading
+            onPressed: isBusy
                 ? null
-                : () => notifier.submitPhone(
-                    eventId,
-                    _phoneController.text.trim(),
-                  ),
+                : () => _submitPhone(eventId, _phoneController.text.trim()),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFc51f43),
               foregroundColor: Colors.white,
@@ -351,7 +383,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            child: uiState.step == CheckInStep.loading
+            child: isBusy
                 ? const SizedBox(
                     height: 24,
                     width: 24,
@@ -360,10 +392,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                       strokeWidth: 2.5,
                     ),
                   )
-                : const Text(
-                    'Search & Check In',
-                    style: TextStyle(fontSize: 18),
-                  ),
+                : const Text('Check In', style: TextStyle(fontSize: 18)),
           ),
         ),
       ],

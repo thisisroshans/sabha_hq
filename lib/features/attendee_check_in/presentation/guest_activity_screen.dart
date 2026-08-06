@@ -247,8 +247,8 @@ Widget _buildAttendeeTile(Attendee guest, Event? events) {
           const SizedBox(height: 4),
           Text(
             guest.companyName.isNotEmpty
-                ? '$dateString • ${guest.companyName} (${guest.phone})'
-                : '$dateString • ${guest.phone}',
+                ? '$dateString • ${guest.companyName}'
+                : dateString,
             style: const TextStyle(fontSize: 12),
           ),
         ],

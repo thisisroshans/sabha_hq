@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sabha_hq/core/firebase/firestore_refs.dart';
 import 'package:sabha_hq/core/models/attendee.dart';
+import 'package:sabha_hq/core/utils/phone.dart';
 
 final guestRepositoryProvider = Provider<GuestRepository>(
   (ref) => GuestRepository(),
@@ -19,7 +20,11 @@ class GuestRepository {
   /// Add a single new guest to the event
   Future<void> addGuest(String eventId, Attendee guest) async {
     final docRef = FirestoreRefs.attendees(eventId).doc();
-    final newGuest = guest.copyWith(id: docRef.id, eventId: eventId);
+    final newGuest = guest.copyWith(
+      id: docRef.id,
+      eventId: eventId,
+      phone: PhoneUtils.normalize(guest.phone),
+    );
     await docRef.set(newGuest);
   }
 
@@ -33,13 +38,12 @@ class GuestRepository {
     for (final guest in guests) {
       final docRef = collectionRef.doc(); // Generate new ID
 
-      // Standardize phone number before batching
-      final formattedPhone = guest.phone.replaceAll(RegExp(r'\s+'), '');
-
+      // Canonical 10-digit form, so a CSV carrying "+91 98765 43210" still
+      // matches the bare digits an attendee types at the kiosk.
       final newGuest = guest.copyWith(
         id: docRef.id,
         eventId: eventId,
-        phone: formattedPhone,
+        phone: PhoneUtils.normalize(guest.phone),
       );
 
       batch.set(docRef, newGuest);

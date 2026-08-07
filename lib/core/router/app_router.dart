@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,19 +17,47 @@ import 'package:sabha_hq/features/attendee_check_in/presentation/check_in_screen
 // ADDED: Import for the new Live Activity Screen
 import 'package:sabha_hq/features/admin_dashboard/presentation/live_activity_screen.dart';
 
-import '../../features/admin_auth/application/auth_controller.dart';
 import '../../features/admin_analytics/presentation/analytics_screen.dart'
     deferred as analytics;
 
+/// Bridges a Stream (Firebase auth state changes) into a Listenable that
+/// go_router's `refreshListenable` can watch. This lets auth changes
+/// re-run `redirect` on the CURRENT location, instead of the old approach
+/// of `ref.watch`-ing auth state inside the GoRouter provider — which
+/// rebuilt a brand new GoRouter (reset to `initialLocation`) on every
+/// sign-in/sign-out, including the guest kiosk's silent anonymous
+/// sign-in/out. That's what was bouncing guests to /login.
+class GoRouterRefreshStream extends ChangeNotifier {
+  GoRouterRefreshStream(Stream<dynamic> stream) {
+    notifyListeners();
+    _subscription = stream.asBroadcastStream().listen(
+      (_) => notifyListeners(),
+    );
+  }
+
+  late final StreamSubscription<dynamic> _subscription;
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+}
+
+// A single GoRouter instance lives for the app's lifetime — it must never
+// be recreated on auth changes (that resets navigation to
+// initialLocation). Reactivity to auth comes from refreshListenable below.
 final goRouterProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateProvider);
+  final refreshStream = GoRouterRefreshStream(
+    FirebaseAuth.instance.authStateChanges(),
+  );
+  ref.onDispose(refreshStream.dispose);
 
   return GoRouter(
     initialLocation: '/dashboard/events',
+    refreshListenable: refreshStream,
     redirect: (context, state) {
-      if (authState.isLoading) return null;
-
-      final user = authState.valueOrNull;
+      final user = FirebaseAuth.instance.currentUser;
       final isAdmin = user != null && user.email != null;
 
       final isGoingToAdmin = state.matchedLocation.startsWith('/dashboard');
@@ -35,7 +66,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
 
       if (isRoot) return '/dashboard/events';
 
-      // Block non-admins (including phone-authenticated attendees) from the dashboard
+      // Block non-admins (including anonymous check-in kiosk sessions) from
+      // the dashboard.
       if (isGoingToAdmin && !isAdmin) return '/login';
 
       // If an admin hits login, send them to dashboard

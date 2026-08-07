@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'package:sabha_hq/core/models/attendee.dart';
+import 'package:sabha_hq/core/utils/phone.dart';
 
 import '../data/guest_repository.dart';
 
@@ -41,13 +42,11 @@ class GuestActionController extends AutoDisposeAsyncNotifier<void> {
     if (eventId == null) return false;
 
     try {
-      final formattedPhone = phone.replaceAll(RegExp(r'\s+'), '');
-
       final repository = ref.read(guestRepositoryProvider);
       final newGuest = Attendee(
         id: '',
         eventId: eventId,
-        phone: formattedPhone,
+        phone: PhoneUtils.normalize(phone),
         name: name,
         email: email,
         role: role,
@@ -136,7 +135,7 @@ class GuestActionController extends AutoDisposeAsyncNotifier<void> {
               id: '',
               eventId: eventId,
               name: name,
-              phone: phone.replaceAll(RegExp(r'\s+'), ''),
+              phone: PhoneUtils.normalize(phone),
               email: email,
               role: role == 'participant' ? 'participant' : 'guest',
               isCheckedIn: false,

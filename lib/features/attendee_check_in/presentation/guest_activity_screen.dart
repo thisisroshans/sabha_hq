@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:sabha_hq/core/models/attendee.dart';
 import 'package:sabha_hq/core/models/event.dart';
@@ -7,8 +8,6 @@ import 'package:sabha_hq/features/admin_dashboard/application/live_feed_provider
 import 'package:sabha_hq/features/admin_events/application/event_providers.dart';
 import 'package:sabha_hq/features/attendee_check_in/application/phone_auth_controller.dart';
 import 'package:sabha_hq/features/attendee_check_in/application/staff_check_in_controller.dart';
-import 'package:sabha_hq/features/attendee_check_in/presentation/check_in_screen.dart';
-// Import your CheckInScreen here
 
 class GuestActivityScreen extends ConsumerWidget {
   final String eventId;
@@ -27,10 +26,11 @@ class GuestActivityScreen extends ConsumerWidget {
     //    doesn't carry their identity into the next person's check-in.
     ref.read(guestAuthControllerProvider.notifier).reset();
 
-    // 3. Navigate back to the CheckInScreen
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => CheckInScreen(eventId: eventId)),
-    );
+    // 3. Navigate back to the check-in phone-entry screen via go_router
+    //    (not a raw Navigator push) so the route/redirect logic stays in
+    //    sync — this lands back on "enter your phone number", never on
+    //    the admin login screen.
+    context.go('/check-in?eventId=$eventId');
   }
 
   @override
@@ -193,6 +193,8 @@ Widget _buildColumn({
 }
 
 Widget _buildAttendeeTile(Attendee guest, Event? events) {
+  final isParticipant = guest.role.toLowerCase() == 'participant';
+
   final timeString = guest.checkInTime != null
       ? DateFormat('h:mm a').format(guest.checkInTime!)
       : 'Just now';
@@ -203,6 +205,22 @@ Widget _buildAttendeeTile(Attendee guest, Event? events) {
   final roleDisplay = guest.role.isNotEmpty
       ? '${guest.role[0].toUpperCase()}${guest.role.substring(1).toLowerCase()}'
       : 'Guest';
+
+  // Participants show designation + company + email; everyone else shows
+  // the check-in date (+ company, if on file).
+  final String secondLine;
+  if (isParticipant) {
+    final parts = [
+      guest.designation,
+      guest.companyName,
+      guest.email,
+    ].where((s) => s.isNotEmpty);
+    secondLine = parts.isNotEmpty ? parts.join(' • ') : 'No details on file';
+  } else {
+    secondLine = guest.companyName.isNotEmpty
+        ? '$dateString • ${guest.companyName}'
+        : dateString;
+  }
 
   return ListTile(
     isThreeLine: true,
@@ -246,10 +264,9 @@ Widget _buildAttendeeTile(Attendee guest, Event? events) {
           ),
           const SizedBox(height: 4),
           Text(
-            guest.companyName.isNotEmpty
-                ? '$dateString • ${guest.companyName}'
-                : dateString,
+            secondLine,
             style: const TextStyle(fontSize: 12),
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

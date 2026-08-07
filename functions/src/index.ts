@@ -26,3 +26,7 @@ export const ping = onCall((request) => {
     receivedAt: new Date().toISOString(),
   };
 });
+
+// Phase 1 / task 4: org membership via an invite-token flow.
+// See functions/src/invites.ts for the full design and caveats.
+export { createInvite, acceptInvite } from "./invites";

@@ -10,7 +10,8 @@
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
     "lint": "eslint src --ext .ts",
-    "test:migration": "firebase emulators:exec --project sabha-hq --only firestore,auth \"node scripts/_smoke-test-migration.js\""
+    "test:migration": "firebase emulators:exec --project sabha-hq --only firestore,auth \"node scripts/_smoke-test-migration.js\"",
+    "test:invites": "npm run build && firebase emulators:exec --project sabha-hq --only firestore,auth \"node scripts/_smoke-test-invites.js\""
   },
   "engines": {
     "node": "20"

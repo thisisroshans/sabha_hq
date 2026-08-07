@@ -6,9 +6,15 @@
  * What it does, in order:
  *   1. Creates orgs/{orgId} if it doesn't already exist.
  *   2. Lists every Firebase Auth user signed in with email/password (i.e.
- *      today's definition of "admin" — see firestore.rules' isAdmin()) and
- *      makes each one a member of the org with role 'owner'. Adjust roles
- *      by hand afterwards if that's too generous for your team.
+ *      today's definition of "admin" — see firestore.rules' isAdmin()),
+ *      makes each one a member of the org with role 'owner', AND sets
+ *      their {orgId, role} custom claim directly (bypassing the invite
+ *      flow in functions/src/invites.ts — there's no one to send THEM an
+ *      invite). Skipping the claim would be a real lockout: task #5's
+ *      rules check request.auth.token.orgId, and without this step the
+ *      bootstrap owner would have a membership doc but no way to satisfy
+ *      that check. Adjust roles by hand afterwards if 'owner' for
+ *      everyone existing is too generous for your team.
  *   3. Copies every root-level events/{eventId} doc, and its attendees/
  *      and feedback/ subcollections, to orgs/{orgId}/events/{eventId}/...
  *      — SAME ids, so it's safe to re-run (uses set(), not add()).
@@ -152,10 +158,14 @@ async function main() {
         role: "owner",
         joinedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
+      if (!dryRun) {
+        const existingClaims = user.customClaims || {};
+        await auth.setCustomUserClaims(user.uid, { ...existingClaims, orgId: args.orgId, role: "owner" });
+      }
     }
     nextPageToken = page.pageToken;
   } while (nextPageToken);
-  console.log(`Members: ${memberCount} password-auth user(s) -> role 'owner'.`);
+  console.log(`Members: ${memberCount} password-auth user(s) -> role 'owner' (Firestore doc + custom claim).`);
 
   // --- 3. Events + attendees + feedback ------------------------------
   const eventsSnap = await db.collection("events").get();

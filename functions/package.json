@@ -9,7 +9,8 @@
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src --ext .ts",
+    "test:migration": "firebase emulators:exec --project sabha-hq --only firestore,auth \"node scripts/_smoke-test-migration.js\""
   },
   "engines": {
     "node": "20"

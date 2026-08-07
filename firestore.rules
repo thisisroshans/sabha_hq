@@ -1,54 +1,115 @@
 rules_version = '2';
 
+// TARGET rules for the org-scoped schema (see docs/saas-schema.md) —
+// NOT YET DEPLOYABLE. The live app still reads/writes the old flat
+// events/{eventId}/... paths (that cutover is task #9, tracked separately
+// and deliberately not done in this task). Deploying this file today would
+// break production, since nothing below matches those flat paths and the
+// catch-all at the bottom denies everything else. This file is committed
+// to the switch_to_saas branch to be deployed together with task #9's app
+// changes, not before.
+//
+// The two holes this replaces (see the pre-migration version of this file
+// in git history for comparison):
+//   1. isAdmin() used to mean "signed in with email/password" full stop —
+//      no org check at all. Any admin, any org, could read/write/delete
+//      any event, anywhere.
+//   2. isGuestSession() let any anonymous check-in session (from ANY
+//      event's check-in link) read every event's attendee list, because
+//      the rule never looked at which event the session belonged to.
+//
+// Fix for #1: isOrgMember()/isOwnerOrAdmin() check request.auth.token.orgId
+// against the specific org being accessed (custom claims set by
+// functions/src/invites.ts on invite-accept, or by
+// functions/scripts/migrate-to-orgs.js for the bootstrap owner).
+//
+// Fix for #2: isGuestSessionFor(orgId, eventId) requires BOTH to match —
+// not just "some anonymous session", but specifically one that
+// functions/src/guestSessions.ts's beginGuestSession stamped with this
+// exact event. Proven in functions/scripts/_test-firestore-rules.js: a
+// guest session bound to event A cannot read event B's attendees even
+// within the SAME org, let alone a different one.
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Admins sign in with email/password (see admin_auth/data/auth_repository.dart,
-    // router redirect uses user.email != null). Guests get a silent, no-UI
-    // anonymous session the moment they open the check-in screen (see
-    // attendee_check_in/application/phone_auth_controller.dart's
-    // GuestAuthController) — no OTP, no credential the guest sets up
-    // themselves, so the sign-in provider cleanly tells the two apart.
-    function isAdmin() {
-      return request.auth != null &&
-        request.auth.token.firebase.sign_in_provider == 'password';
+    function isOrgMember(orgId) {
+      return request.auth != null && request.auth.token.orgId == orgId;
     }
 
-    function isGuestSession() {
-      return request.auth != null &&
-        request.auth.token.firebase.sign_in_provider == 'anonymous';
+    function isOwnerOrAdmin(orgId) {
+      return isOrgMember(orgId) &&
+        (request.auth.token.role == 'owner' || request.auth.token.role == 'admin');
     }
 
-    match /events/{eventId} {
-      // Event details (title/date/location/branding) are needed by the
-      // public check-in screen before the guest is authenticated, so reads
-      // stay open. Only admins manage events.
-      allow read: if true;
-      allow create, update, delete: if isAdmin();
+    function isGuestSessionFor(orgId, eventId) {
+      return request.auth != null &&
+        request.auth.token.firebase.sign_in_provider == 'anonymous' &&
+        request.auth.token.guestOrgId == orgId &&
+        request.auth.token.guestEventId == eventId;
+    }
 
-      match /attendees/{attendeeId} {
-        // The live roster (this event's Guest Activity screen + admin live
-        // feed) is readable by any authenticated party — admin or a
-        // checked-in guest session.
-        allow read: if isAdmin() || isGuestSession();
+    match /orgs/{orgId} {
+      allow read: if isOrgMember(orgId);
+      allow update: if isOwnerOrAdmin(orgId);
+      // No client-side org creation/deletion yet — orgs are created today
+      // only by functions/scripts/migrate-to-orgs.js (Admin SDK, bypasses
+      // rules entirely). A real "create my org" callable is Phase 2 (self-
+      // serve signup, task #7); deletion has no flow at all yet and
+      // shouldn't be a rules-only decision.
+      allow create, delete: if false;
 
-        // Admins manage the guest list freely (bulk import, edits, deletes).
-        // Guest sessions are anonymous (no verified phone/identity claim),
-        // so — same as before OTP was added — there's no way to scope a
-        // write to "only your own record"; any active guest session may
-        // search/check-in/register a walk-in, but never delete.
-        allow create, update: if isAdmin() || isGuestSession();
-        allow delete: if isAdmin();
+      match /members/{uid} {
+        // Any member can see who else is on the team.
+        allow read: if isOrgMember(orgId);
+        // Not actually used by any current flow — acceptInviteHandler
+        // writes this doc via the Admin SDK, which bypasses rules. Kept
+        // sane for when a "manage team" screen exists.
+        allow write: if isOwnerOrAdmin(orgId);
       }
 
-      match /feedback/{feedbackId} {
-        allow read: if isAdmin();
-        allow create: if isAdmin() || isGuestSession();
-        allow update, delete: if isAdmin();
+      match /invites/{token} {
+        // createInvite/acceptInvite (functions/src/invites.ts) both use
+        // the Admin SDK, which bypasses rules — no client reads or writes
+        // this collection today. Left fully locked down rather than
+        // opening read access nobody needs yet, since an invite doc
+        // carries an email address tied to a bearer token.
+        allow read, write: if false;
+      }
+
+      match /events/{eventId} {
+        // Event details (title/date/location/branding) are needed by the
+        // public check-in screen before any auth completes, and carry no
+        // PII — same reasoning as the pre-migration rules, just scoped
+        // under the org path now.
+        allow read: if true;
+        allow create, update, delete: if isOwnerOrAdmin(orgId);
+
+        match /attendees/{attendeeId} {
+          // Any org member (owner/admin/staff) can see and check in
+          // attendees; a guest session may only touch the one event it
+          // was bound to by beginGuestSession — this is the fix for hole
+          // #2 above.
+          allow read: if isOrgMember(orgId) || isGuestSessionFor(orgId, eventId);
+          allow create, update: if isOrgMember(orgId) || isGuestSessionFor(orgId, eventId);
+          // Deleting an attendee record is destructive enough to reserve
+          // for owner/admin — staff can check people in, not erase them.
+          allow delete: if isOwnerOrAdmin(orgId);
+        }
+
+        match /feedback/{feedbackId} {
+          allow read: if isOwnerOrAdmin(orgId);
+          allow create: if isOrgMember(orgId) || isGuestSessionFor(orgId, eventId);
+          allow update, delete: if isOwnerOrAdmin(orgId);
+        }
       }
     }
 
-    // Deny everything else by default.
+    // Deny everything else by default — including the legacy flat
+    // events/{eventId}/... tree the migration script copies FROM but
+    // deliberately never deletes. No client should touch that legacy data
+    // once the app cuts over (task #9); an operator can still inspect or
+    // delete it via the Admin SDK/console, which always bypasses rules.
     match /{document=**} {
       allow read, write: if false;
     }

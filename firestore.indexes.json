@@ -63,5 +63,24 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      // Platform dashboard (functions/src/platform.ts's getPlatformOverview):
+      // collectionGroup('attendees').where('orgId','==',orgId).count() —
+      // a bare single-field equality filter, no other clauses. The
+      // composite index above happens to have orgId as its leftmost
+      // field so may already cover this as a prefix match, but relying on
+      // that implicitly is fragile — Firestore doesn't enable
+      // collection-group indexing for a field by default even though it
+      // auto-indexes single fields at plain COLLECTION scope. This
+      // explicitly turns collection-group indexing on for orgId, so the
+      // query is unambiguously supported regardless of what happens to
+      // the composite index above.
+      "collectionGroup": "attendees",
+      "fieldPath": "orgId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    }
+  ]
 }

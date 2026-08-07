@@ -1,6 +1,7 @@
 import { CallableRequest, HttpsError, onCall } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import * as crypto from "crypto";
+import { orgLimits } from "./limits";
 
 export type Role = "owner" | "admin" | "staff";
 const VALID_ROLES: Role[] = ["owner", "admin", "staff"];
@@ -56,6 +57,25 @@ export async function createInviteHandler(
   const isAuthorized = callerOrgId === orgId && (callerRole === "owner" || callerRole === "admin");
   if (!isAuthorized) {
     throw new HttpsError("permission-denied", "Only an owner or admin of this org can invite members.");
+  }
+
+  const orgSnap = await db().collection("orgs").doc(orgId).get();
+  if (!orgSnap.exists) throw new HttpsError("not-found", "Org not found.");
+  if (orgSnap.data()?.status === "suspended") {
+    throw new HttpsError("failed-precondition", "This organization is currently suspended.");
+  }
+
+  // Fail fast at invite-creation time too, not just at accept — no point
+  // handing someone a link that can only ever fail. Accept still has the
+  // authoritative check below, since seats could fill up between now and
+  // whenever this invite is actually redeemed.
+  const memberCountSnap = await db().collection("orgs").doc(orgId).collection("members").count().get();
+  const limits = orgLimits(orgSnap.data());
+  if (memberCountSnap.data().count >= limits.maxTeamMembers) {
+    throw new HttpsError(
+      "resource-exhausted",
+      `This organization has reached its team member limit (${limits.maxTeamMembers}).`
+    );
   }
 
   const normalizedEmail = email.trim().toLowerCase();
@@ -115,6 +135,24 @@ export async function acceptInviteHandler(
   const callerEmail = (auth.token.email as string | undefined)?.toLowerCase();
   if (!callerEmail || callerEmail !== invite.email) {
     throw new HttpsError("permission-denied", "This invite was sent to a different email address.");
+  }
+
+  const orgSnap = await db().collection("orgs").doc(orgId).get();
+  if (!orgSnap.exists) throw new HttpsError("not-found", "Org not found.");
+  if (orgSnap.data()?.status === "suspended") {
+    throw new HttpsError("failed-precondition", "This organization is currently suspended.");
+  }
+
+  // Authoritative seat check — createInviteHandler already checked this
+  // once, but seats can fill up between an invite being created and it
+  // actually being redeemed, so this is what actually protects the limit.
+  const memberCountSnap = await db().collection("orgs").doc(orgId).collection("members").count().get();
+  const limits = orgLimits(orgSnap.data());
+  if (memberCountSnap.data().count >= limits.maxTeamMembers) {
+    throw new HttpsError(
+      "resource-exhausted",
+      `This organization has reached its team member limit (${limits.maxTeamMembers}).`
+    );
   }
 
   const role = invite.role;

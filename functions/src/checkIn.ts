@@ -1,6 +1,7 @@
 import { CallableRequest, HttpsError, onCall } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { normalizePhone, phoneLookupVariants } from "./phone";
+import { orgLimits } from "./limits";
 
 function db() {
   return admin.firestore();
@@ -31,8 +32,21 @@ function callerIsAuthorized(
   return token.orgId === orgId;
 }
 
+/** Fetches the org once per call and checks suspension — both checkIn
+ * and registerWalkIn need the org doc anyway (for its limits), so this
+ * combines "is this org even usable right now" with "here are its
+ * limits" into one read instead of two separate lookups. */
+async function requireActiveOrg(orgId: string): Promise<FirebaseFirestore.DocumentData> {
+  const orgSnap = await db().collection("orgs").doc(orgId).get();
+  if (!orgSnap.exists) throw new HttpsError("not-found", "Event not found.");
+  const data = orgSnap.data()!;
+  if (data.status === "suspended") {
+    throw new HttpsError("failed-precondition", "This event is not currently available.");
+  }
+  return data;
+}
+
 const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX_ATTEMPTS = 8;
 
 /**
  * Lightweight per-(event, caller) cooldown — a rolling window of attempt
@@ -42,8 +56,18 @@ const RATE_LIMIT_MAX_ATTEMPTS = 8;
  * real deterrent against a single kiosk session hammering the search/
  * write path, implemented without adding infrastructure (Redis/
  * Memorystore) this app doesn't otherwise need.
+ *
+ * maxAttempts is per-org now (orgs/{orgId}.limits.checkInRateLimitPerMinute,
+ * platform-owner adjustable) — it used to be a hardcoded constant here;
+ * the default (8) is unchanged, so nothing shifts for an org until a
+ * platform owner deliberately adjusts it.
  */
-async function checkRateLimit(orgId: string, eventId: string, uid: string): Promise<void> {
+async function checkRateLimit(
+  orgId: string,
+  eventId: string,
+  uid: string,
+  maxAttempts: number
+): Promise<void> {
   const ref = db()
     .collection("orgs")
     .doc(orgId)
@@ -59,7 +83,7 @@ async function checkRateLimit(orgId: string, eventId: string, uid: string): Prom
     const previousAttempts: number[] = (snap.data()?.attempts as number[]) ?? [];
     const recentAttempts = previousAttempts.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
 
-    if (recentAttempts.length >= RATE_LIMIT_MAX_ATTEMPTS) {
+    if (recentAttempts.length >= maxAttempts) {
       throw new HttpsError(
         "resource-exhausted",
         "Too many attempts. Please wait a moment and try again."
@@ -144,7 +168,9 @@ export async function checkInHandler(
     throw new HttpsError("permission-denied", "Not authorized for this event.");
   }
 
-  await checkRateLimit(orgId, eventId, request.auth!.uid);
+  const org = await requireActiveOrg(orgId);
+  const limits = orgLimits(org);
+  await checkRateLimit(orgId, eventId, request.auth!.uid, limits.checkInRateLimitPerMinute);
 
   const variants = phoneLookupVariants(phone);
   if (variants.length === 0) {
@@ -223,7 +249,9 @@ export async function registerWalkInHandler(
     throw new HttpsError("permission-denied", "Not authorized for this event.");
   }
 
-  await checkRateLimit(orgId, eventId, request.auth!.uid);
+  const org = await requireActiveOrg(orgId);
+  const limits = orgLimits(org);
+  await checkRateLimit(orgId, eventId, request.auth!.uid, limits.checkInRateLimitPerMinute);
 
   const attendeesRef = db()
     .collection("orgs")
@@ -231,6 +259,19 @@ export async function registerWalkInHandler(
     .collection("events")
     .doc(eventId)
     .collection("attendees");
+
+  // Enforced here (not via CSV import / manual add in the admin guest
+  // list — those stay direct client writes and are a known, documented
+  // gap, see docs/saas-schema.md) because this is the guest self-service
+  // path most exposed to runaway growth: a kiosk left unattended
+  // registering walk-ins has no other backstop.
+  const attendeeCountSnap = await attendeesRef.count().get();
+  if (attendeeCountSnap.data().count >= limits.maxAttendeesPerEvent) {
+    throw new HttpsError(
+      "resource-exhausted",
+      `This event has reached its attendee limit (${limits.maxAttendeesPerEvent}).`
+    );
+  }
 
   const docRef = attendeesRef.doc();
   const normalizedPhone = normalizePhone(phone);

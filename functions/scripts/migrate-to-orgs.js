@@ -61,6 +61,7 @@
  */
 
 const admin = require("firebase-admin");
+const { DEFAULT_LIMITS } = require("../lib/limits");
 
 function parseArgs(argv) {
   const args = { orgId: "unpuzzle", orgName: "Unpuzzle", execute: false, iMeanIt: false };
@@ -139,7 +140,12 @@ async function main() {
   if (orgSnap.exists) {
     console.log(`orgs/${args.orgId} already exists — leaving its fields as-is.`);
   } else {
-    await writer.set(orgRef, { name: args.orgName, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+    await writer.set(orgRef, {
+      name: args.orgName,
+      status: "active",
+      limits: DEFAULT_LIMITS,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
     console.log(`orgs/${args.orgId}: will create.`);
   }
 

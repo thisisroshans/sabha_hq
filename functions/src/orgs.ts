@@ -1,5 +1,6 @@
 import { CallableRequest, HttpsError, onCall } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import { DEFAULT_LIMITS } from "./limits";
 
 function db() {
   return admin.firestore();
@@ -50,6 +51,8 @@ export async function createOrgHandler(
   await orgRef.set({
     name: orgName,
     plan: "free",
+    status: "active",
+    limits: DEFAULT_LIMITS,
     createdAt: now,
   });
 

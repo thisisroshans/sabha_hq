@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sabha_hq/core/firebase/firestore_refs.dart';
 import 'package:sabha_hq/core/models/event.dart';
@@ -7,6 +8,10 @@ final eventRepositoryProvider = Provider<EventRepository>((ref) {
 });
 
 class EventRepository {
+  // Must match functions' setGlobalOptions({ region: 'asia-south1' }) in
+  // functions/src/index.ts.
+  static const _functionsRegion = 'asia-south1';
+
   /// Stream all events for the dashboard, ordered by date
   Stream<List<Event>> watchAllEvents(String orgId) {
     return FirestoreRefs.events(orgId)
@@ -28,20 +33,28 @@ class EventRepository {
     return snapshot.data();
   }
 
-  /// Create a new event.
-  /// We generate a Firestore document reference first to get the unique ID.
+  /// Create a new event via the createEvent callable
+  /// (functions/src/events.ts) — not a direct write, so the org's
+  /// maxEvents limit can actually be enforced (a Firestore rule can't
+  /// count how many events already exist in a subcollection).
   Future<void> createEvent(String orgId, Event event) async {
-    final docRef = FirestoreRefs.events(orgId).doc();
-
-    // Update the event with the generated ID before saving
-    final newEvent = event.copyWith(id: docRef.id);
-
-    // Our withConverter automatically strips the 'id' field out before saving
-    // to Firestore, keeping the DB clean!
-    await docRef.set(newEvent);
+    try {
+      await FirebaseFunctions.instanceFor(region: _functionsRegion)
+          .httpsCallable('createEvent')
+          .call({
+            'orgId': orgId,
+            'title': event.title,
+            'location': event.location,
+            'dateIso': event.date.toIso8601String(),
+          });
+    } on FirebaseFunctionsException catch (e) {
+      throw Exception(e.message ?? e.code);
+    }
   }
 
-  /// Update an existing event's details or branding
+  /// Update an existing event's details or branding. Unlike create, this
+  /// isn't limit-gated, so it stays a direct client write (firestore.rules
+  /// still checks isOwnerOrAdmin + org-active).
   Future<void> updateEvent(String orgId, Event event) async {
     await FirestoreRefs.events(orgId).doc(event.id).set(event);
   }

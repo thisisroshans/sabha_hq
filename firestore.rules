@@ -17,7 +17,7 @@ rules_version = '2';
 // recognize. Not attempted here per the standing "don't deploy" instruction
 // for this branch.
 //
-// The three holes this replaces (see git history for the pre-migration
+// The holes this replaces (see git history for the pre-migration
 // version of this file):
 //   1. isAdmin() used to mean "signed in with email/password" full stop —
 //      no org check at all. Any admin, any org, could read/write/delete
@@ -43,6 +43,32 @@ rules_version = '2';
 // exact event. Proven in functions/scripts/_test-firestore-rules.js: a
 // guest session bound to event A cannot read event B's attendees even
 // within the SAME org, let alone a different one.
+//
+// ---------------------------------------------------------------------
+// PLATFORM DASHBOARD (Sabha HQ's own ops dashboard, not any customer's) —
+// see functions/src/platform.ts and lib/features/platform/.
+//
+// platformRole is a claim on Sabha HQ staff accounts, structurally
+// SEPARATE from {orgId, role} — a platform-staff account belongs to no
+// org and cannot inherit any org's data access through isOrgMember().
+// Only 'owner' exists today; a lesser 'support' tier (usage/limits
+// visibility without full org data) is anticipated but not built.
+//
+// isPlatformOwner() is added ONLY to READ rules, giving Sabha HQ's owner
+// the same read visibility into every org that org's own owner/admin has
+// — not write access, and not the ability to act as the org (that's
+// impersonation, deliberately not built — see the SaaS platform plan).
+// orgs/{orgId}.limits/.status/.plan are excluded from the org's own
+// update rule (see below) and are writable only via Admin SDK
+// (functions/src/platform.ts), so every change to them is guaranteed to
+// go through platformAuditLog — there is no direct-write path to bypass
+// that trail, for the platform owner or the org itself.
+//
+// orgIsActive(orgId) blocks WRITES (not reads) once a platform owner sets
+// status:'suspended' — reads stay open so a suspended org's own admin UI
+// can still show a clear "you're suspended" banner instead of a wall of
+// permission-denied errors.
+// ---------------------------------------------------------------------
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -63,9 +89,32 @@ service cloud.firestore {
         request.auth.token.guestEventId == eventId;
     }
 
+    function isPlatformOwner() {
+      return request.auth != null && request.auth.token.platformRole == 'owner';
+    }
+
+    // Treats an org with no status field yet (every org created before
+    // this feature existed) as active — suspension is opt-in via an
+    // explicit platform action, never a side effect of the field being
+    // unset. Costs one extra document read per write this guards; a
+    // normal, accepted tradeoff for a cross-document business rule check
+    // rules can't otherwise express.
+    function orgIsActive(orgId) {
+      let org = get(/databases/$(database)/documents/orgs/$(orgId)).data;
+      return !('status' in org) || org.status != 'suspended';
+    }
+
     match /orgs/{orgId} {
-      allow read: if isOrgMember(orgId);
-      allow update: if isOwnerOrAdmin(orgId);
+      allow read: if isOrgMember(orgId) || isPlatformOwner();
+      // The org's own owner/admin can rename it etc., but NOT touch
+      // limits/status/plan — those are platform-controlled fields, sent
+      // through functions/src/platform.ts only, so every change is
+      // audit-logged. Without this exclusion, an org could just write
+      // {status: 'active', limits: {...raised...}} directly and the
+      // whole platform dashboard would be theater.
+      allow update: if isOwnerOrAdmin(orgId) && orgIsActive(orgId) &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['limits', 'status', 'plan']);
       // Still no CLIENT-side org creation/deletion — self-serve creation
       // exists now (functions/src/orgs.ts's createOrg, task #7) but runs
       // as the Admin SDK, which bypasses rules entirely, same as
@@ -74,20 +123,21 @@ service cloud.firestore {
       allow create, delete: if false;
 
       match /members/{uid} {
-        // Any member can see who else is on the team.
-        allow read: if isOrgMember(orgId);
+        // Any member can see who else is on the team; the platform owner
+        // can see every org's team, same as that org's own owner can.
+        allow read: if isOrgMember(orgId) || isPlatformOwner();
         // Not actually used by any current flow — acceptInviteHandler
         // writes this doc via the Admin SDK, which bypasses rules. Kept
         // sane for when a "manage team" screen exists.
-        allow write: if isOwnerOrAdmin(orgId);
+        allow write: if isOwnerOrAdmin(orgId) && orgIsActive(orgId);
       }
 
       match /invites/{token} {
         // createInvite/acceptInvite (functions/src/invites.ts) both use
         // the Admin SDK, which bypasses rules — no client reads or writes
-        // this collection today. Left fully locked down rather than
-        // opening read access nobody needs yet, since an invite doc
-        // carries an email address tied to a bearer token.
+        // this collection today, including the platform owner: an org's
+        // own owner can't read these either, so this isn't a gap in
+        // "view everything an org owner can see" — it's parity.
         allow read, write: if false;
       }
 
@@ -97,13 +147,20 @@ service cloud.firestore {
         // PII — same reasoning as the pre-migration rules, just scoped
         // under the org path now.
         allow read: if true;
-        allow create, update, delete: if isOwnerOrAdmin(orgId);
+        // create moved to the createEvent callable (functions/src/events.ts)
+        // — it needs to run a count() aggregation to enforce maxEvents,
+        // which rules can't express (get() reads one document; there's no
+        // rules equivalent of counting a subcollection). update/delete
+        // don't need a quantity check, so they stay direct client writes.
+        allow create: if false;
+        allow update, delete: if isOwnerOrAdmin(orgId) && orgIsActive(orgId);
 
         match /attendees/{attendeeId} {
           // Any org member (owner/admin/staff) can see and manage
           // attendees; a guest session may only READ the one event it
           // was bound to by beginGuestSession — this is the fix for hole
-          // #2 above.
+          // #2 above. Platform owner reads everything, same as any org's
+          // own owner/admin can.
           //
           // Guests do NOT get create/update here (fix for hole #3): the
           // kiosk's search/check-in/walk-in writes go through the
@@ -112,11 +169,11 @@ service cloud.firestore {
           // entirely — they don't need a client-write allowance to work.
           // Only org members write attendees directly now (CSV import,
           // manual add/edit in the admin guest list).
-          allow read: if isOrgMember(orgId) || isGuestSessionFor(orgId, eventId);
-          allow create, update: if isOrgMember(orgId);
+          allow read: if isOrgMember(orgId) || isGuestSessionFor(orgId, eventId) || isPlatformOwner();
+          allow create, update: if isOrgMember(orgId) && orgIsActive(orgId);
           // Deleting an attendee record is destructive enough to reserve
           // for owner/admin — staff can check people in, not erase them.
-          allow delete: if isOwnerOrAdmin(orgId);
+          allow delete: if isOwnerOrAdmin(orgId) && orgIsActive(orgId);
         }
 
         match /feedback/{feedbackId} {
@@ -126,9 +183,9 @@ service cloud.firestore {
           // have before that task. The /feedback screen itself (task #8)
           // calls ensureGuestSession the same way check-in does, so this
           // works the same way for the same reason.
-          allow read: if isOwnerOrAdmin(orgId);
-          allow create: if isOrgMember(orgId) || isGuestSessionFor(orgId, eventId);
-          allow update, delete: if isOwnerOrAdmin(orgId);
+          allow read: if isOwnerOrAdmin(orgId) || isPlatformOwner();
+          allow create: if (isOrgMember(orgId) || isGuestSessionFor(orgId, eventId)) && orgIsActive(orgId);
+          allow update, delete: if isOwnerOrAdmin(orgId) && orgIsActive(orgId);
         }
 
         match /scheduleItems/{itemId} {
@@ -136,12 +193,14 @@ service cloud.firestore {
           // PII, needed pre-auth so a guest can see "what's happening
           // now" without checking in first. Only owner/admin manage it.
           allow read: if true;
-          allow create, update, delete: if isOwnerOrAdmin(orgId);
+          allow create, update, delete: if isOwnerOrAdmin(orgId) && orgIsActive(orgId);
         }
 
         // checkIn.ts's own bookkeeping — rate-limit counters and the
         // audit log it writes on every attempt. Both written exclusively
-        // by the Admin SDK (bypasses rules); no UI reads either today.
+        // by the Admin SDK (bypasses rules); no UI reads either today,
+        // including the platform owner — an org's own owner can't read
+        // these either, so leaving this closed is parity, not a gap.
         // Explicit deny here rather than relying silently on the
         // catch-all at the bottom, so a future "show me the check-in
         // audit log" screen has to consciously open this up rather than
@@ -153,6 +212,16 @@ service cloud.firestore {
           allow read, write: if false;
         }
       }
+    }
+
+    // Sabha HQ's own audit trail of platform-owner actions (limit
+    // changes, suspensions) — functions/src/platform.ts writes every
+    // entry via the Admin SDK. No client write path exists, so every
+    // entry here is guaranteed to have gone through a logged function
+    // call, not a forgeable direct write.
+    match /platformAuditLog/{logId} {
+      allow read: if isPlatformOwner();
+      allow write: if false;
     }
 
     // Deny everything else by default — including the legacy flat

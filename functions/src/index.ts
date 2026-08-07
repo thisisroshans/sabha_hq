@@ -42,3 +42,17 @@ export { checkIn, registerWalkIn } from "./checkIn";
 
 // Phase 2 / task 7: self-serve org creation. See functions/src/orgs.ts.
 export { createOrg } from "./orgs";
+
+// Sabha HQ's own ops dashboard (platform-owner only, not customer-facing).
+// See functions/src/platform.ts.
+export {
+  getPlatformOverview,
+  getOrgDetail,
+  updateOrgLimits,
+  setOrgStatus,
+  getPlatformAuditLog,
+} from "./platform";
+
+// Event creation moved here so maxEvents can actually be enforced — see
+// functions/src/events.ts for why rules alone can't do this.
+export { createEvent } from "./events";

@@ -19,16 +19,13 @@ interface BeginGuestSessionData {
  * for guests would have to be scoped to "any event in the org" at best,
  * or "any event anywhere" at worst (today's actual bug).
  *
- * NOT the same job as task #6 (move check-in to a callable function) —
- * this only stamps a claim so rules can check it; the actual
- * search/check-in/walk-in writes still go through CheckInRepository
- * directly for now. Task #6 is the bigger lift of moving that logic
- * server-side too.
+ * NOT the same job as checkIn.ts's checkIn/registerWalkIn — this only
+ * stamps a claim so rules (and those callables) can check it; the actual
+ * search/check-in/walk-in writes happen there, server-side, not here.
  *
- * The Flutter side calling this is task #9 (app cutover) — right after
- * GuestAuthController.ensureSignedIn() succeeds, before any Firestore
- * read/write, the check-in screen needs to call this with the eventId
- * from its query parameter. Not wired up yet.
+ * Called from GuestAuthController.ensureGuestSession(), right after
+ * ensureSignedIn() succeeds and before any Firestore read/write — see
+ * lib/features/attendee_check_in/application/phone_auth_controller.dart.
  */
 export async function beginGuestSessionHandler(
   request: CallableRequest<BeginGuestSessionData>
@@ -52,9 +49,18 @@ export async function beginGuestSessionHandler(
 
   // Don't mint a claim binding this session to an event that doesn't
   // exist under this org — cheap check, closes an easy garbage-in path.
-  const eventSnap = await db().collection("orgs").doc(orgId).collection("events").doc(eventId).get();
+  const [orgSnap, eventSnap] = await Promise.all([
+    db().collection("orgs").doc(orgId).get(),
+    db().collection("orgs").doc(orgId).collection("events").doc(eventId).get(),
+  ]);
   if (!eventSnap.exists) {
     throw new HttpsError("not-found", "Event not found.");
+  }
+  // Fail here rather than letting the guest fill out the phone form only
+  // to have checkIn/registerWalkIn reject it a step later — both of those
+  // check suspension too (defense in depth, not reliance on this alone).
+  if (orgSnap.data()?.status === "suspended") {
+    throw new HttpsError("failed-precondition", "This event is not currently available.");
   }
 
   const existingClaims = (await admin.auth().getUser(auth.uid)).customClaims || {};

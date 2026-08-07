@@ -10,30 +10,35 @@ final guestRepositoryProvider = Provider<GuestRepository>(
 
 class GuestRepository {
   /// Stream attendees for a specific event
-  Stream<List<Attendee>> watchGuests(String eventId) {
-    return FirestoreRefs.attendees(eventId)
+  Stream<List<Attendee>> watchGuests(String orgId, String eventId) {
+    return FirestoreRefs.attendees(orgId, eventId)
         .orderBy('name')
         .snapshots()
         .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
   }
 
   /// Add a single new guest to the event
-  Future<void> addGuest(String eventId, Attendee guest) async {
-    final docRef = FirestoreRefs.attendees(eventId).doc();
+  Future<void> addGuest(String orgId, String eventId, Attendee guest) async {
+    final docRef = FirestoreRefs.attendees(orgId, eventId).doc();
     final newGuest = guest.copyWith(
       id: docRef.id,
       eventId: eventId,
+      orgId: orgId,
       phone: PhoneUtils.normalize(guest.phone),
     );
     await docRef.set(newGuest);
   }
 
   /// Uploads multiple guests simultaneously using a WriteBatch
-  Future<void> addGuestsInBatch(String eventId, List<Attendee> guests) async {
+  Future<void> addGuestsInBatch(
+    String orgId,
+    String eventId,
+    List<Attendee> guests,
+  ) async {
     final db = FirebaseFirestore.instance;
     final batch = db.batch();
 
-    final collectionRef = FirestoreRefs.attendees(eventId);
+    final collectionRef = FirestoreRefs.attendees(orgId, eventId);
 
     for (final guest in guests) {
       final docRef = collectionRef.doc(); // Generate new ID
@@ -43,6 +48,7 @@ class GuestRepository {
       final newGuest = guest.copyWith(
         id: docRef.id,
         eventId: eventId,
+        orgId: orgId,
         phone: PhoneUtils.normalize(guest.phone),
       );
 
@@ -54,7 +60,7 @@ class GuestRepository {
   }
 
   /// Remove a guest from the event
-  Future<void> removeGuest(String eventId, String guestId) async {
-    await FirestoreRefs.attendees(eventId).doc(guestId).delete();
+  Future<void> removeGuest(String orgId, String eventId, String guestId) async {
+    await FirestoreRefs.attendees(orgId, eventId).doc(guestId).delete();
   }
 }

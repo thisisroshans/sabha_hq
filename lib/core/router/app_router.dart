@@ -82,8 +82,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/check-in',
         builder: (context, state) {
+          // Both ids travel in the URL — this is a public,
+          // pre-authentication screen with no admin claims to resolve an
+          // org from (see qr_code_dialog.dart, which is what generates
+          // this link).
+          final orgId = state.uri.queryParameters['orgId'];
           final eventId = state.uri.queryParameters['eventId'];
-          return CheckInScreen(eventId: eventId);
+          return CheckInScreen(orgId: orgId, eventId: eventId);
         },
       ),
       GoRoute(

@@ -3,22 +3,29 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:web/web.dart' as web;
 
 import '../../../../core/models/event.dart';
+import '../../../../core/providers/current_org_provider.dart';
 
-class QrCodeDialog extends StatelessWidget {
+class QrCodeDialog extends ConsumerWidget {
   const QrCodeDialog({super.key, required this.event});
 
   final Event event;
 
-  String get _checkInUrl => '${Uri.base.origin}/check-in?eventId=${event.id}';
+  // The check-in link needs BOTH ids — the public check-in flow has no
+  // admin claims to resolve an org from (it's a signed-out/anonymous
+  // guest), so orgId has to travel in the URL itself. See
+  // check_in_screen.dart and app_router.dart's /check-in route.
+  String _checkInUrl(String orgId) =>
+      '${Uri.base.origin}/check-in?orgId=$orgId&eventId=${event.id}';
 
-  Future<void> _downloadQrCode(BuildContext context) async {
+  Future<void> _downloadQrCode(BuildContext context, String checkInUrl) async {
     try {
       final validation = QrValidator.validate(
-        data: _checkInUrl,
+        data: checkInUrl,
         version: QrVersions.auto,
         errorCorrectionLevel: QrErrorCorrectLevel.L,
       );
@@ -96,8 +103,8 @@ class QrCodeDialog extends StatelessWidget {
     }
   }
 
-  void _copyLink(BuildContext context) {
-    Clipboard.setData(ClipboardData(text: _checkInUrl));
+  void _copyLink(BuildContext context, String checkInUrl) {
+    Clipboard.setData(ClipboardData(text: checkInUrl));
 
     _showSnackBar(
       context,
@@ -117,7 +124,7 @@ class QrCodeDialog extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final screenSize = MediaQuery.of(context).size;
     final isMobile = screenSize.width < 600;
 
@@ -125,6 +132,8 @@ class QrCodeDialog extends StatelessWidget {
     final qrSize = isMobile
         ? (screenSize.width * 0.55).clamp(180.0, 240.0)
         : 280.0;
+
+    final orgIdState = ref.watch(currentOrgIdProvider);
 
     return Dialog(
       insetPadding: EdgeInsets.symmetric(
@@ -137,114 +146,138 @@ class QrCodeDialog extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(24),
 
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Check-In: ${event.title}',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: isMobile ? 18 : 20,
+          child: orgIdState.when(
+            loading: () => const SizedBox(
+              height: 200,
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: (e, _) => SizedBox(
+              height: 200,
+              child: Center(child: Text('Could not load org: $e')),
+            ),
+            data: (orgId) {
+              if (orgId == null) {
+                return const SizedBox(
+                  height: 200,
+                  child: Center(
+                    child: Text('No organization found for this account.'),
                   ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: EdgeInsets.all(isMobile ? 12 : 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: QrImageView(
-                    data: _checkInUrl,
-                    version: QrVersions.auto,
-                    size: qrSize,
-                    eyeStyle: const QrEyeStyle(
-                      eyeShape: QrEyeShape.square,
-                      color: Color(0xFFc51f43),
-                    ),
-                    dataModuleStyle: const QrDataModuleStyle(
-                      dataModuleShape: QrDataModuleShape.square,
-                      color: Color(0xFFc51f43),
-                    ),
-                    backgroundColor: Colors.white,
-                  ),
-                ),
+                );
+              }
 
-                const SizedBox(height: 16),
+              final checkInUrl = _checkInUrl(orgId);
 
-                Text(
-                  'Attendees can scan this QR at the venue\n'
-                  'or you can share the check-in link directly.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.grey[700],
-                    fontSize: isMobile ? 12 : 14,
-                    height: 1.4,
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF5F5F5),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFE0E0E0)),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: SelectableText(
-                          _checkInUrl,
-                          maxLines: 1,
-                          style: TextStyle(
-                            fontSize: isMobile ? 11 : 12,
-                            color: Colors.black87,
-                          ),
-                        ),
+              return SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Check-In: ${event.title}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: isMobile ? 18 : 20,
                       ),
-                      IconButton(
-                        tooltip: 'Copy Link',
-                        icon: const Icon(
-                          Icons.copy,
-                          size: 18,
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: EdgeInsets.all(isMobile ? 12 : 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: QrImageView(
+                        data: checkInUrl,
+                        version: QrVersions.auto,
+                        size: qrSize,
+                        eyeStyle: const QrEyeStyle(
+                          eyeShape: QrEyeShape.square,
                           color: Color(0xFFc51f43),
                         ),
-                        onPressed: () => _copyLink(context),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () => _downloadQrCode(context),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFFc51f43),
+                        dataModuleStyle: const QrDataModuleStyle(
+                          dataModuleShape: QrDataModuleShape.square,
+                          color: Color(0xFFc51f43),
                         ),
-                        icon: const Icon(Icons.download, size: 18),
-                        label: const Text('Download QR'),
+                        backgroundColor: Colors.white,
                       ),
                     ),
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Close'),
+
+                    const SizedBox(height: 16),
+
+                    Text(
+                      'Attendees can scan this QR at the venue\n'
+                      'or you can share the check-in link directly.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.grey[700],
+                        fontSize: isMobile ? 12 : 14,
+                        height: 1.4,
                       ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF5F5F5),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFE0E0E0)),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: SelectableText(
+                              checkInUrl,
+                              maxLines: 1,
+                              style: TextStyle(
+                                fontSize: isMobile ? 11 : 12,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Copy Link',
+                            icon: const Icon(
+                              Icons.copy,
+                              size: 18,
+                              color: Color(0xFFc51f43),
+                            ),
+                            onPressed: () => _copyLink(context, checkInUrl),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: () =>
+                                _downloadQrCode(context, checkInUrl),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFFc51f43),
+                            ),
+                            icon: const Icon(Icons.download, size: 18),
+                            label: const Text('Download QR'),
+                          ),
+                        ),
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Close'),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),

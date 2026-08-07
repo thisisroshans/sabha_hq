@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sabha_hq/core/firebase/firestore_refs.dart';
+import 'package:sabha_hq/core/providers/current_org_provider.dart';
 
 class EventMetrics {
   final int totalRegistered;
@@ -15,13 +16,25 @@ class EventMetrics {
   });
 
   int get pending => totalRegistered - totalCheckedIn;
+
+  static const empty = EventMetrics(
+    totalRegistered: 0,
+    totalCheckedIn: 0,
+    guests: 0,
+    participants: 0,
+  );
 }
 
-// Using .family allows us to pass the specific eventId we want to analyze
+// Using .family allows us to pass the specific eventId we want to analyze.
+// orgId is resolved internally (currentOrgIdProvider) so the analytics
+// screen's call site didn't need to change.
 final eventMetricsProvider = FutureProvider.autoDispose
     .family<EventMetrics, String>((ref, eventId) async {
+      final orgId = await ref.watch(currentOrgIdProvider.future);
+      if (orgId == null) return EventMetrics.empty;
+
       // .get() fetches once. This prevents infinite read loops on the dashboard.
-      final snapshot = await FirestoreRefs.attendees(eventId).get();
+      final snapshot = await FirestoreRefs.attendees(orgId, eventId).get();
       final attendees = snapshot.docs.map((d) => d.data()).toList();
 
       int checkedIn = 0;

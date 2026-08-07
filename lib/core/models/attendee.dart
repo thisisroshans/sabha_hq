@@ -13,6 +13,14 @@ class Attendee {
   final String designation;
   final String industry;
 
+  // Denormalised org id — see docs/saas-schema.md. The doc's real
+  // isolation boundary is the orgs/{orgId}/events/{eventId}/attendees
+  // path itself; this field exists only so the admin dashboard's
+  // collectionGroup('attendees') "All Events" query (which spans every
+  // event's attendees subcollection at once and can't be scoped by path
+  // alone) can filter to one org.
+  final String orgId;
+
   Attendee({
     required this.id,
     required this.eventId,
@@ -25,6 +33,7 @@ class Attendee {
     this.companyName = '',
     this.designation = '',
     this.industry = '',
+    this.orgId = '',
   });
 
   Attendee copyWith({
@@ -39,6 +48,7 @@ class Attendee {
     String? companyName,
     String? designation,
     String? industry,
+    String? orgId,
   }) {
     return Attendee(
       id: id ?? this.id,
@@ -52,6 +62,7 @@ class Attendee {
       companyName: companyName ?? this.companyName,
       designation: designation ?? this.designation,
       industry: industry ?? this.industry,
+      orgId: orgId ?? this.orgId,
     );
   }
 
@@ -68,6 +79,7 @@ class Attendee {
       'companyName': companyName,
       'designation': designation,
       'industry': industry,
+      'orgId': orgId,
     };
   }
 
@@ -84,6 +96,7 @@ class Attendee {
       companyName: map['companyName'] ?? '',
       designation: map['designation'] ?? '',
       industry: map['industry'] ?? '',
+      orgId: map['orgId'] ?? '',
     );
   }
 }

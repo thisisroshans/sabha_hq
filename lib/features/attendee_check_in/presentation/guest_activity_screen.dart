@@ -10,11 +10,13 @@ import 'package:sabha_hq/features/attendee_check_in/application/phone_auth_contr
 import 'package:sabha_hq/features/attendee_check_in/application/staff_check_in_controller.dart';
 
 class GuestActivityScreen extends ConsumerWidget {
+  final String orgId;
   final String eventId;
   final String guestName;
 
   const GuestActivityScreen({
     super.key,
+    required this.orgId,
     required this.eventId,
     required this.guestName,
   });
@@ -23,20 +25,25 @@ class GuestActivityScreen extends ConsumerWidget {
     // 1. Reset the check-in form state.
     ref.read(staffCheckInProvider.notifier).reset();
     // 2. Sign this guest out of Firebase Auth so the shared kiosk device
-    //    doesn't carry their identity into the next person's check-in.
+    //    doesn't carry their identity (or event-scoped claim) into the
+    //    next person's check-in.
     ref.read(guestAuthControllerProvider.notifier).reset();
 
     // 3. Navigate back to the check-in phone-entry screen via go_router
     //    (not a raw Navigator push) so the route/redirect logic stays in
     //    sync — this lands back on "enter your phone number", never on
     //    the admin login screen.
-    context.go('/check-in?eventId=$eventId');
+    context.go('/check-in?orgId=$orgId&eventId=$eventId');
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final liveFeedState = ref.watch(eventAttendeesStreamProvider(eventId));
-    final eventState = ref.watch(eventProvider(eventId));
+    final liveFeedState = ref.watch(
+      eventAttendeesStreamProvider((orgId: orgId, eventId: eventId)),
+    );
+    final eventState = ref.watch(
+      eventForGuestProvider((orgId: orgId, eventId: eventId)),
+    );
     return Scaffold(
       appBar: AppBar(
         title: const Text('Live Event'),

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'package:sabha_hq/core/models/attendee.dart';
+import 'package:sabha_hq/core/providers/current_org_provider.dart';
 import 'package:sabha_hq/core/utils/phone.dart';
 
 import '../data/guest_repository.dart';
@@ -12,11 +13,20 @@ import '../data/guest_repository.dart';
 final selectedEventFilterProvider = StateProvider<String?>((ref) => null);
 
 // 2. Streams the guests ONLY for the selected event
-final guestListProvider = StreamProvider.autoDispose<List<Attendee>>((ref) {
+final guestListProvider = StreamProvider.autoDispose<List<Attendee>>((ref) async* {
   final eventId = ref.watch(selectedEventFilterProvider);
-  if (eventId == null) return const Stream.empty();
+  if (eventId == null) {
+    yield const [];
+    return;
+  }
 
-  return ref.watch(guestRepositoryProvider).watchGuests(eventId);
+  final orgId = await ref.watch(currentOrgIdProvider.future);
+  if (orgId == null) {
+    yield const [];
+    return;
+  }
+
+  yield* ref.watch(guestRepositoryProvider).watchGuests(orgId, eventId);
 });
 
 // 3. Handles Add, Remove, and Bulk Add actions
@@ -28,6 +38,16 @@ final guestActionControllerProvider =
 class GuestActionController extends AutoDisposeAsyncNotifier<void> {
   @override
   FutureOr<void> build() {}
+
+  Future<String> _requireOrgId() async {
+    final orgId = await ref.read(currentOrgIdProvider.future);
+    if (orgId == null) {
+      throw Exception(
+        'No organization found for this account. Contact an owner to be invited.',
+      );
+    }
+    return orgId;
+  }
 
   /// Adds a single guest from the manual UI form
   Future<bool> addGuest({
@@ -42,6 +62,7 @@ class GuestActionController extends AutoDisposeAsyncNotifier<void> {
     if (eventId == null) return false;
 
     try {
+      final orgId = await _requireOrgId();
       final repository = ref.read(guestRepositoryProvider);
       final newGuest = Attendee(
         id: '',
@@ -53,7 +74,7 @@ class GuestActionController extends AutoDisposeAsyncNotifier<void> {
         isCheckedIn: false,
       );
 
-      await repository.addGuest(eventId, newGuest);
+      await repository.addGuest(orgId, eventId, newGuest);
       state = const AsyncData(null);
       return true;
     } catch (e, st) {
@@ -73,8 +94,9 @@ class GuestActionController extends AutoDisposeAsyncNotifier<void> {
     }
 
     try {
+      final orgId = await _requireOrgId();
       final repository = ref.read(guestRepositoryProvider);
-      await repository.addGuestsInBatch(eventId, guests);
+      await repository.addGuestsInBatch(orgId, eventId, guests);
 
       state = const AsyncData(null);
       return true;
@@ -165,7 +187,8 @@ class GuestActionController extends AutoDisposeAsyncNotifier<void> {
     if (eventId == null) return false;
 
     try {
-      await ref.read(guestRepositoryProvider).removeGuest(eventId, guestId);
+      final orgId = await _requireOrgId();
+      await ref.read(guestRepositoryProvider).removeGuest(orgId, eventId, guestId);
       state = const AsyncData(null);
       return true;
     } catch (e, st) {

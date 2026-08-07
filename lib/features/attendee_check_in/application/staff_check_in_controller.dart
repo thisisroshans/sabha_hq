@@ -29,12 +29,12 @@ class StaffCheckInController extends AutoDisposeNotifier<StaffCheckInState> {
   @override
   StaffCheckInState build() => StaffCheckInState();
 
-  Future<void> submitPhone(String eventId, String phone) async {
+  Future<void> submitPhone(String orgId, String eventId, String phone) async {
     state = StaffCheckInState(step: CheckInStep.loading);
 
     try {
       final repo = ref.read(checkInRepositoryProvider);
-      final guest = await repo.searchAndCheckIn(eventId, phone);
+      final guest = await repo.searchAndCheckIn(orgId, eventId, phone);
 
       if (guest == null) {
         // Walk-In Scenario
@@ -60,6 +60,7 @@ class StaffCheckInController extends AutoDisposeNotifier<StaffCheckInState> {
   }
 
   Future<void> submitFullRegistration({
+    required String orgId,
     required String eventId,
     required String name,
     required String email,
@@ -74,6 +75,7 @@ class StaffCheckInController extends AutoDisposeNotifier<StaffCheckInState> {
     try {
       final repo = ref.read(checkInRepositoryProvider);
       final guest = await repo.registerFullWalkIn(
+        orgId: orgId,
         eventId: eventId,
         phone: phone,
         name: name,

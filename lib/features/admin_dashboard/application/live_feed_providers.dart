@@ -2,27 +2,42 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sabha_hq/core/firebase/firestore_refs.dart';
 import 'package:sabha_hq/core/models/attendee.dart';
+import 'package:sabha_hq/core/providers/current_org_provider.dart';
 
 // 1. New Provider to track the selected event in the Live Feed
 final liveFeedEventFilterProvider = StateProvider<String>((ref) => 'all');
 
+// Controls how many records to fetch. Starts at 25.
+final liveFeedLimitProvider = StateProvider<int>((ref) => 25);
+
 // 2. Updated Stream Provider
+//
+// The "All Events" branch used to be a bare collectionGroup('attendees')
+// query with no org filter at all — across every tenant, not just this
+// admin's. Now scoped with .where('orgId', isEqualTo: orgId), matching
+// the composite index added for exactly this in firestore.indexes.json
+// and the isOrgMember() check in firestore.rules.
 final liveActivityStreamProvider = StreamProvider.autoDispose<List<Attendee>>((
   ref,
-) {
+) async* {
+  final orgId = await ref.watch(currentOrgIdProvider.future);
+  if (orgId == null) {
+    yield const [];
+    return;
+  }
+
   final eventId = ref.watch(liveFeedEventFilterProvider);
 
   Query query;
-
   if (eventId == 'all') {
-    // Global feed across all events (returns Map<String, dynamic>)
-    query = FirebaseFirestore.instance.collectionGroup('attendees');
+    query = FirebaseFirestore.instance
+        .collectionGroup('attendees')
+        .where('orgId', isEqualTo: orgId);
   } else {
-    // Local feed for a specific event (might return Attendee objects via withConverter)
-    query = FirestoreRefs.attendees(eventId);
+    query = FirestoreRefs.attendees(orgId, eventId);
   }
 
-  return query
+  yield* query
       .where('isCheckedIn', isEqualTo: true)
       .orderBy('checkInTime', descending: true)
       .limit(50)
@@ -44,9 +59,14 @@ final liveActivityStreamProvider = StreamProvider.autoDispose<List<Attendee>>((
 // Scoped to a single event (used by the attendee-facing Guest Activity
 // screen after check-in) — independent of the admin dashboard's global
 // liveFeedEventFilterProvider so it never fights over shared state.
+//
+// Takes orgId explicitly (not resolved from currentOrgIdProvider) because
+// its caller is the PUBLIC check-in flow — a guest has no admin claims to
+// resolve an org from, so the screen carries orgId from the check-in URL
+// instead. See check_in_screen.dart / guest_activity_screen.dart.
 final eventAttendeesStreamProvider = StreamProvider.autoDispose
-    .family<List<Attendee>, String>((ref, eventId) {
-      return FirestoreRefs.attendees(eventId)
+    .family<List<Attendee>, ({String orgId, String eventId})>((ref, key) {
+      return FirestoreRefs.attendees(key.orgId, key.eventId)
           .where('isCheckedIn', isEqualTo: true)
           .orderBy('checkInTime', descending: true)
           .limit(ref.watch(liveFeedLimitProvider))
@@ -55,58 +75,3 @@ final eventAttendeesStreamProvider = StreamProvider.autoDispose
             (snapshot) => snapshot.docs.map((doc) => doc.data()).toList(),
           );
     });
-
-// Controls how many records to fetch. Starts at 25.
-final liveFeedLimitProvider = StateProvider<int>((ref) => 25);
-
-final participantsStreamProvider = StreamProvider.autoDispose<List<Attendee>>((
-  ref,
-) {
-  final eventId = ref.watch(liveFeedEventFilterProvider);
-  final currentLimit = ref.watch(
-    liveFeedLimitProvider,
-  ); // Watch the dynamic limit
-
-  Query query = eventId == 'all'
-      ? FirebaseFirestore.instance.collectionGroup('attendees')
-      : FirestoreRefs.attendees(eventId);
-
-  return query
-      .where('isCheckedIn', isEqualTo: true)
-      .where('role', isEqualTo: 'participant')
-      .orderBy('checkInTime', descending: true)
-      .limit(currentLimit) // Use the dynamic limit here
-      .snapshots()
-      .map(
-        (snapshot) => snapshot.docs.map((doc) {
-          final data = doc.data();
-          if (data is Attendee) return data;
-          return Attendee.fromMap(data as Map<String, dynamic>, doc.id);
-        }).toList(),
-      );
-});
-
-final guestsStreamProvider = StreamProvider.autoDispose<List<Attendee>>((ref) {
-  final eventId = ref.watch(liveFeedEventFilterProvider);
-  final currentLimit = ref.watch(
-    liveFeedLimitProvider,
-  ); // Watch the dynamic limit
-
-  Query query = eventId == 'all'
-      ? FirebaseFirestore.instance.collectionGroup('attendees')
-      : FirestoreRefs.attendees(eventId);
-
-  return query
-      .where('isCheckedIn', isEqualTo: true)
-      .where('role', isNotEqualTo: 'participant')
-      .orderBy('checkInTime', descending: true)
-      .limit(currentLimit) // Use the dynamic limit here
-      .snapshots()
-      .map(
-        (snapshot) => snapshot.docs.map((doc) {
-          final data = doc.data();
-          if (data is Attendee) return data;
-          return Attendee.fromMap(data as Map<String, dynamic>, doc.id);
-        }).toList(),
-      );
-});

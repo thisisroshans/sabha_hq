@@ -11,7 +11,11 @@ final checkInRepositoryProvider = Provider<CheckInRepository>(
 class CheckInRepository {
   /// Searches for a guest by phone. If found, checks them in.
   /// Returns NULL if the guest is not found (Walk-In required).
-  Future<Attendee?> searchAndCheckIn(String eventId, String phone) async {
+  Future<Attendee?> searchAndCheckIn(
+    String orgId,
+    String eventId,
+    String phone,
+  ) async {
     final normalizedPhone = PhoneUtils.normalize(phone);
     final variants = PhoneUtils.lookupVariants(phone);
     if (variants.isEmpty) return null;
@@ -20,6 +24,7 @@ class CheckInRepository {
     // imported as "+91 98765 43210" is still found when they type the bare
     // 10 digits at the kiosk. One indexed query, not one per variant.
     final querySnapshot = await FirestoreRefs.attendees(
+      orgId,
       eventId,
     ).where('phone', whereIn: variants).limit(1).get();
 
@@ -52,6 +57,7 @@ class CheckInRepository {
 
   /// Registers a brand new walk-in guest with full details and instantly checks them in.
   Future<Attendee> registerFullWalkIn({
+    required String orgId,
     required String eventId,
     required String phone,
     required String name,
@@ -60,11 +66,12 @@ class CheckInRepository {
     required String designation,
     required String industry,
   }) async {
-    final docRef = FirestoreRefs.attendees(eventId).doc();
+    final docRef = FirestoreRefs.attendees(orgId, eventId).doc();
 
     final walkInGuest = Attendee(
       id: docRef.id,
       eventId: eventId,
+      orgId: orgId,
       name: name,
       email: email,
       phone: PhoneUtils.normalize(phone),

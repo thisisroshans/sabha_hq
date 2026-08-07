@@ -6,8 +6,9 @@ import '../application/phone_auth_controller.dart';
 import '../application/staff_check_in_controller.dart';
 
 class CheckInScreen extends ConsumerStatefulWidget {
+  final String? orgId;
   final String? eventId;
-  const CheckInScreen({super.key, required this.eventId});
+  const CheckInScreen({super.key, required this.orgId, required this.eventId});
 
   @override
   ConsumerState<CheckInScreen> createState() => _CheckInScreenState();
@@ -30,9 +31,14 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _phoneFocus.requestFocus();
-      // Silent, no-UI auth so Firestore rules (request.auth != null) are
-      // satisfied by the time the guest submits their phone number.
-      ref.read(guestAuthControllerProvider.notifier).ensureSignedIn();
+      // Silent, no-UI auth + event binding, so Firestore rules
+      // (isGuestSessionFor(orgId, eventId)) are satisfied by the time the
+      // guest submits their phone number.
+      if (widget.orgId != null && widget.eventId != null) {
+        ref
+            .read(guestAuthControllerProvider.notifier)
+            .ensureGuestSession(widget.orgId!, widget.eventId!);
+      }
     });
   }
 
@@ -60,22 +66,25 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
     _phoneFocus.requestFocus();
   }
 
-  Future<void> _submitPhone(String eventId, String phone) async {
+  Future<void> _submitPhone(String orgId, String eventId, String phone) async {
     if (phone.isEmpty) return;
-    final signedIn = await ref
+    final ready = await ref
         .read(guestAuthControllerProvider.notifier)
-        .ensureSignedIn();
-    if (!signedIn || !mounted) return;
-    ref.read(staffCheckInProvider.notifier).submitPhone(eventId, phone);
+        .ensureGuestSession(orgId, eventId);
+    if (!ready || !mounted) return;
+    ref.read(staffCheckInProvider.notifier).submitPhone(orgId, eventId, phone);
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.eventId == null) {
+    if (widget.orgId == null || widget.eventId == null) {
       return const Scaffold(
         body: Center(child: Text('Invalid Link. Missing Event ID.')),
       );
     }
+
+    final orgId = widget.orgId!;
+    final eventId = widget.eventId!;
 
     // ------------------------------------------------------------------
     // NAVIGATION LISTENER: Watch for successful check-in
@@ -89,7 +98,8 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (context) => GuestActivityScreen(
-                eventId: widget.eventId!,
+                orgId: orgId,
+                eventId: eventId,
                 guestName: next.checkedInGuest?.name ?? 'Guest',
               ),
             ),
@@ -134,7 +144,8 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                   uiState,
                   notifier,
                   guestAuthState,
-                  widget.eventId!,
+                  orgId,
+                  eventId,
                   isMobile,
                 ),
               ),
@@ -149,6 +160,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
     StaffCheckInState uiState,
     StaffCheckInController notifier,
     AsyncValue<void> guestAuthState,
+    String orgId,
     String eventId,
     bool isMobile,
   ) {
@@ -285,6 +297,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                 }
 
                 notifier.submitFullRegistration(
+                  orgId: orgId,
                   eventId: eventId,
                   name: _nameController.text.trim(),
                   email: _emailController.text.trim(),
@@ -366,7 +379,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
           textInputAction: TextInputAction.search,
           maxLength: 10,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          onSubmitted: (val) => _submitPhone(eventId, val.trim()),
+          onSubmitted: (val) => _submitPhone(orgId, eventId, val.trim()),
         ),
         const SizedBox(height: 24),
         SizedBox(
@@ -375,7 +388,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
           child: ElevatedButton(
             onPressed: isBusy
                 ? null
-                : () => _submitPhone(eventId, _phoneController.text.trim()),
+                : () => _submitPhone(orgId, eventId, _phoneController.text.trim()),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFc51f43),
               foregroundColor: Colors.white,

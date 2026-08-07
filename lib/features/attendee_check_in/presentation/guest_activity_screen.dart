@@ -27,16 +27,26 @@ class GuestActivityScreen extends ConsumerWidget {
   void _handleLogout(BuildContext context, WidgetRef ref) {
     // 1. Reset the check-in form state.
     ref.read(staffCheckInProvider.notifier).reset();
-    // 2. Sign this guest out of Firebase Auth so the shared kiosk device
+
+    // 2. Navigate back to the check-in phone-entry screen FIRST, via
+    //    go_router (not a raw Navigator push) so the route/redirect logic
+    //    stays in sync — this lands back on "enter your phone number",
+    //    never on the admin login screen.
+    //
+    //    This must happen before signing out below. This screen's
+    //    Firestore streams are scoped by the guest's auth claims
+    //    (isGuestSessionFor in firestore.rules); if we sign out while
+    //    still mounted here, those listeners re-evaluate against the
+    //    now-signed-out user and briefly surface a raw
+    //    "permission-denied" error screen before the route change lands.
+    //    Navigating away first unmounts the listeners before the token
+    //    disappears, so the guest never sees that flash.
+    context.go('/check-in?orgId=$orgId&eventId=$eventId');
+
+    // 3. Sign this guest out of Firebase Auth so the shared kiosk device
     //    doesn't carry their identity (or event-scoped claim) into the
     //    next person's check-in.
     ref.read(guestAuthControllerProvider.notifier).reset();
-
-    // 3. Navigate back to the check-in phone-entry screen via go_router
-    //    (not a raw Navigator push) so the route/redirect logic stays in
-    //    sync — this lands back on "enter your phone number", never on
-    //    the admin login screen.
-    context.go('/check-in?orgId=$orgId&eventId=$eventId');
   }
 
   @override
@@ -129,7 +139,36 @@ class GuestActivityScreen extends ConsumerWidget {
                                     child: CircularProgressIndicator(),
                                   ),
                                   error: (e, st) => Center(
-                                    child: Text('Error loading feed: $e'),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(24.0),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.wifi_off_rounded,
+                                            size: 40,
+                                            color: Colors.grey[400],
+                                          ),
+                                          const SizedBox(height: 12),
+                                          Text(
+                                            "Couldn't load the live feed.",
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.grey[700],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'Check your connection and try again.',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: Colors.grey[500],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                   data: (attendees) {
                                     return _buildColumn(

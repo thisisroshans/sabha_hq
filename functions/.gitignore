@@ -1,0 +1,11 @@
+# Compiled output
+lib/
+
+# Dependency directory
+node_modules/
+
+# Emulator/debug artifacts
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.runtimeconfig.json

@@ -1,5 +1,5 @@
 name: sabha_hq
-description: "A dual-route Flutter web application for Admin Dashboard and Attendee Check-in."
+description: "Sabha HQ — multi-tenant event check-in and live guest management."
 publish_to: 'none'
 version: 0.1.0+1
 

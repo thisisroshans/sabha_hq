@@ -14,6 +14,7 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -28,6 +29,83 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
           .read(authControllerProvider.notifier)
           .login(_emailController.text.trim(), _passwordController.text.trim());
     }
+  }
+
+  Future<void> _showForgotPasswordDialog() async {
+    // Prefill with whatever they'd already typed in the email field, if
+    // anything, so they don't have to re-type it.
+    final emailController = TextEditingController(text: _emailController.text.trim());
+    bool sent = false;
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final resetState = ref.watch(passwordResetControllerProvider);
+
+          return AlertDialog(
+            title: const Text('Reset Password'),
+            content: sent
+                ? const Text(
+                    "If an account exists for that email, we've sent a link to reset the password. Check your inbox.",
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        "Enter your account email and we'll send you a link to reset your password.",
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: emailController,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Email',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.emailAddress,
+                      ),
+                      if (resetState.hasError) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          resetState.error.toString(),
+                          style: const TextStyle(color: Colors.red, fontSize: 12),
+                        ),
+                      ],
+                    ],
+                  ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(sent ? 'Close' : 'Cancel'),
+              ),
+              if (!sent)
+                ElevatedButton(
+                  onPressed: resetState.isLoading
+                      ? null
+                      : () async {
+                          final email = emailController.text.trim();
+                          if (email.isEmpty || !email.contains('@')) return;
+
+                          final success = await ref
+                              .read(passwordResetControllerProvider.notifier)
+                              .sendResetEmail(email);
+
+                          if (success) setDialogState(() => sent = true);
+                        },
+                  child: resetState.isLoading
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Send Link'),
+                ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -71,18 +149,24 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const Icon(
-                        Icons.admin_panel_settings,
-                        size: 64,
+                        Icons.hub_outlined,
+                        size: 56,
                         color: Color(0xFFc51f43),
                       ),
                       const SizedBox(height: 16),
                       const Text(
-                        'The Unpuzzle Project - Admin',
+                        'Sabha HQ',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 24,
+                          fontSize: 26,
                           fontWeight: FontWeight.bold,
                         ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        "Sign in to manage your organization's events",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
                       ),
                       const SizedBox(height: 32),
 
@@ -108,6 +192,7 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
                           prefixIcon: Icon(Icons.email),
                         ),
                         keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
                         validator: (value) =>
                             value != null && value.contains('@')
                             ? null
@@ -117,17 +202,33 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
 
                       TextFormField(
                         controller: _passwordController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Password',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.lock),
+                          border: const OutlineInputBorder(),
+                          prefixIcon: const Icon(Icons.lock),
+                          suffixIcon: IconButton(
+                            tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                            icon: Icon(
+                              _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                            ),
+                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          ),
                         ),
-                        obscureText: true,
+                        obscureText: _obscurePassword,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _submit(),
                         validator: (value) => value != null && value.length >= 6
                             ? null
                             : 'Password too short',
                       ),
-                      const SizedBox(height: 24),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: _showForgotPasswordDialog,
+                          child: const Text('Forgot password?'),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
 
                       ElevatedButton(
                         onPressed: authState.isLoading ? null : _submit,

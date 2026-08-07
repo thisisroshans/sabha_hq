@@ -45,3 +45,26 @@ class AuthController extends AsyncNotifier<void> {
     await repo.signOut();
   }
 }
+
+// 3. Separate from AuthController's login/signup state — a password-reset
+// attempt needs its own "sent" confirmation, distinct from "successfully
+// logged in", so it gets its own small notifier rather than overloading
+// authControllerProvider's state.
+final passwordResetControllerProvider =
+    AsyncNotifierProvider.autoDispose<PasswordResetController, void>(
+      PasswordResetController.new,
+    );
+
+class PasswordResetController extends AutoDisposeAsyncNotifier<void> {
+  @override
+  FutureOr<void> build() {}
+
+  Future<bool> sendResetEmail(String email) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final repo = ref.read(authRepositoryProvider);
+      await repo.sendPasswordResetEmail(email);
+    });
+    return !state.hasError;
+  }
+}

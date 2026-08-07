@@ -36,4 +36,11 @@ class AuthRepository {
   Future<void> signOut() async {
     await _auth.signOut();
   }
+
+  /// Sends a password-reset email. There was previously no recovery path
+  /// at all if an admin forgot their password — a real dead end for a
+  /// real customer, not just a nice-to-have.
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _auth.sendPasswordResetEmail(email: email);
+  }
 }

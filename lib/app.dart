@@ -11,7 +11,7 @@ class SabhaApp extends ConsumerWidget {
     final router = ref.watch(goRouterProvider);
 
     return MaterialApp.router(
-      title: 'The Unpuzzle Project',
+      title: 'Sabha HQ',
       debugShowCheckedModeBanner: false,
 
       // The router config handles all the URL parsing and navigation

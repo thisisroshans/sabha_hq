@@ -16,6 +16,7 @@ import 'package:sabha_hq/features/admin_guests/presentation/guest_management_scr
 import 'package:sabha_hq/features/admin_org/presentation/accept_invite_screen.dart';
 import 'package:sabha_hq/features/admin_org/presentation/team_screen.dart';
 import 'package:sabha_hq/features/attendee_check_in/presentation/check_in_screen.dart';
+import 'package:sabha_hq/features/attendee_feedback/presentation/feedback_screen.dart';
 
 // ADDED: Import for the new Live Activity Screen
 import 'package:sabha_hq/features/admin_dashboard/presentation/live_activity_screen.dart';
@@ -101,7 +102,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/feedback',
         builder: (context, state) {
-          return const Scaffold(body: Center(child: Text('Feedback Screen')));
+          // Same reasoning as /check-in: public, pre-auth, orgId travels
+          // in the URL. Reached from GuestActivityScreen's "Give
+          // Feedback" button after check-in (task #8).
+          final orgId = state.uri.queryParameters['orgId'];
+          final eventId = state.uri.queryParameters['eventId'];
+          return FeedbackScreen(orgId: orgId, eventId: eventId);
         },
       ),
 

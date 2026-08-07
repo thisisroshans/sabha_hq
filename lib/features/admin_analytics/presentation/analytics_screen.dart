@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
+import 'package:sabha_hq/features/attendee_feedback/application/feedback_admin_providers.dart';
 import '../../admin_events/application/event_providers.dart';
 import '../application/metrics_calculator.dart';
 
@@ -167,14 +169,31 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
           ],
         );
 
-        // 4. Return Row for Desktop, Scrollable Column for Mobile
+        // 4. Return Row for Desktop, Scrollable Column for Mobile.
+        // Feedback (task #8) is appended below either layout, in its own
+        // scrollable section, rather than squeezed into the fixed-height
+        // chart/stats row — that layout is deliberately tight (fl_chart
+        // needs a bounded height) and not the place to add a
+        // variable-length comment list.
         if (isDesktop) {
-          return Row(
-            children: [
-              Expanded(flex: 1, child: chartWidget),
-              const SizedBox(width: 32),
-              Expanded(flex: 1, child: statsWidget),
-            ],
+          return SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  height: 260,
+                  child: Row(
+                    children: [
+                      Expanded(flex: 1, child: chartWidget),
+                      const SizedBox(width: 32),
+                      Expanded(flex: 1, child: statsWidget),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 32),
+                _FeedbackSection(eventId: eventId),
+              ],
+            ),
           );
         } else {
           return SingleChildScrollView(
@@ -184,11 +203,83 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                 SizedBox(height: 250, child: chartWidget),
                 const SizedBox(height: 32),
                 statsWidget,
+                const SizedBox(height: 32),
+                _FeedbackSection(eventId: eventId),
                 const SizedBox(height: 32), // Bottom padding for scrolling
               ],
             ),
           );
         }
+      },
+    );
+  }
+}
+
+class _FeedbackSection extends ConsumerWidget {
+  final String eventId;
+  const _FeedbackSection({required this.eventId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final feedbackState = ref.watch(feedbackForEventProvider(eventId));
+
+    return feedbackState.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Text('Error loading feedback: $e'),
+      data: (feedback) {
+        if (feedback.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final avgRating =
+            feedback.map((f) => f.rating).reduce((a, b) => a + b) /
+            feedback.length;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'Feedback',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(width: 12),
+                const Icon(Icons.star, color: Colors.amber, size: 18),
+                const SizedBox(width: 4),
+                Text(
+                  '${avgRating.toStringAsFixed(1)} avg • ${feedback.length} response${feedback.length == 1 ? '' : 's'}',
+                  style: TextStyle(color: Colors.grey[700]),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ...feedback.map((f) {
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: List.generate(
+                      5,
+                      (i) => Icon(
+                        i < f.rating ? Icons.star : Icons.star_border,
+                        color: Colors.amber,
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    f.comment?.isNotEmpty == true ? f.comment! : 'No comment',
+                  ),
+                  subtitle: Text(
+                    DateFormat('MMM d, yyyy • h:mm a').format(f.submittedAt),
+                  ),
+                ),
+              );
+            }),
+          ],
+        );
       },
     );
   }

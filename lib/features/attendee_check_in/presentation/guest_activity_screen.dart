@@ -4,8 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:sabha_hq/core/models/attendee.dart';
 import 'package:sabha_hq/core/models/event.dart';
+import 'package:sabha_hq/core/models/schedule_item.dart';
+import 'package:sabha_hq/core/utils/color_utils.dart';
 import 'package:sabha_hq/features/admin_dashboard/application/live_feed_providers.dart';
 import 'package:sabha_hq/features/admin_events/application/event_providers.dart';
+import 'package:sabha_hq/features/admin_events/application/schedule_providers.dart';
 import 'package:sabha_hq/features/attendee_check_in/application/phone_auth_controller.dart';
 import 'package:sabha_hq/features/attendee_check_in/application/staff_check_in_controller.dart';
 
@@ -44,12 +47,29 @@ class GuestActivityScreen extends ConsumerWidget {
     final eventState = ref.watch(
       eventForGuestProvider((orgId: orgId, eventId: eventId)),
     );
+    final scheduleState = ref.watch(
+      scheduleItemsForGuestProvider((orgId: orgId, eventId: eventId)),
+    );
+
+    // Event.branding wired up (task #8) — was written by
+    // edit_event_screen.dart but never read anywhere before this.
+    final event = eventState.valueOrNull;
+    final themeColor =
+        parseHexColor(event?.branding['primaryColor'] as String?) ??
+        const Color(0xFFc51f43);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Live Event'),
-        backgroundColor: const Color(0xFFc51f43),
+        backgroundColor: themeColor,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            tooltip: 'Give Feedback',
+            icon: const Icon(Icons.rate_review_outlined),
+            onPressed: () =>
+                context.go('/feedback?orgId=$orgId&eventId=$eventId'),
+          ),
           IconButton(
             tooltip: 'Logout',
             icon: const Icon(Icons.logout),
@@ -80,6 +100,18 @@ class GuestActivityScreen extends ConsumerWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // AGENDA — "happening now" banner (task #8).
+                              // schedule_item.dart existed fully modelled
+                              // with zero UI until this task.
+                              scheduleState.when(
+                                loading: () => const SizedBox.shrink(),
+                                error: (e, st) => const SizedBox.shrink(),
+                                data: (items) => _buildAgendaBanner(
+                                  context: context,
+                                  items: items,
+                                  themeColor: themeColor,
+                                ),
+                              ),
                               SizedBox(height: isMobile ? 16 : 24),
 
                               // SPLIT LIVE FEED LIST
@@ -101,10 +133,9 @@ class GuestActivityScreen extends ConsumerWidget {
                                   ),
                                   data: (attendees) {
                                     return _buildColumn(
-                                      title:
-                                          'Checked In (${attendees.length})',
+                                      title: 'Checked In (${attendees.length})',
                                       icon: Icons.how_to_reg,
-                                      color: const Color(0xFFc51f43),
+                                      color: themeColor,
                                       attendees: attendees,
                                       events: event,
                                       ref: ref,
@@ -128,6 +159,116 @@ class GuestActivityScreen extends ConsumerWidget {
   }
 }
 
+Widget _buildAgendaBanner({
+  required BuildContext context,
+  required List<ScheduleItem> items,
+  required Color themeColor,
+}) {
+  if (items.isEmpty) return const SizedBox.shrink();
+
+  final now = DateTime.now();
+  final current = items
+      .where((i) => now.isAfter(i.startTime) && now.isBefore(i.endTime))
+      .firstOrNull;
+  final next = items.where((i) => i.startTime.isAfter(now)).firstOrNull;
+  final highlight = current ?? next;
+  if (highlight == null) return const SizedBox.shrink();
+
+  final timeFmt = DateFormat('h:mm a');
+  final label = current != null ? 'NOW' : 'NEXT';
+
+  return GestureDetector(
+    onTap: () => _showFullAgenda(context, items, themeColor),
+    child: Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: themeColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: themeColor.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: themeColor,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '${highlight.title} • ${timeFmt.format(highlight.startTime)}',
+              style: TextStyle(fontWeight: FontWeight.w600, color: themeColor),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Icon(Icons.chevron_right, color: themeColor),
+        ],
+      ),
+    ),
+  );
+}
+
+void _showFullAgenda(
+  BuildContext context,
+  List<ScheduleItem> items,
+  Color themeColor,
+) {
+  final timeFmt = DateFormat('h:mm a');
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    builder: (context) {
+      return DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        expand: false,
+        builder: (context, scrollController) {
+          return ListView.separated(
+            controller: scrollController,
+            padding: const EdgeInsets.all(16),
+            itemCount: items.length + 1,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Agenda',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: themeColor,
+                    ),
+                  ),
+                );
+              }
+              final item = items[index - 1];
+              return ListTile(
+                title: Text(item.title),
+                subtitle: Text(
+                  '${timeFmt.format(item.startTime)} – ${timeFmt.format(item.endTime)}'
+                  '${item.speaker != null ? ' • ${item.speaker}' : ''}',
+                ),
+              );
+            },
+          );
+        },
+      );
+    },
+  );
+}
+
 Widget _buildColumn({
   required String title,
   required IconData icon,
@@ -143,7 +284,7 @@ Widget _buildColumn({
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(

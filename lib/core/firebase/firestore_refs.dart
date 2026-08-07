@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/event.dart';
 import '../models/attendee.dart';
 import '../models/feedback.dart';
+import '../models/schedule_item.dart';
 
 // Paths are org-scoped: orgs/{orgId}/events/{eventId}/{attendees,feedback}.
 // See docs/saas-schema.md for why (and for the one deliberate exception —
@@ -90,6 +91,32 @@ class FirestoreRefs {
           },
           toFirestore: (feedback, _) {
             final json = feedback.toJson();
+            json.remove('id');
+            json.remove('eventId');
+            return json;
+          },
+        );
+  }
+
+  // ==========================================
+  // SCHEDULE ITEMS SUBCOLLECTION (org + event scoped) — Phase 3, task #8
+  // ==========================================
+  static CollectionReference<ScheduleItem> scheduleItems(
+    String orgId,
+    String eventId,
+  ) {
+    return _orgEvents(orgId)
+        .doc(eventId)
+        .collection('scheduleItems')
+        .withConverter<ScheduleItem>(
+          fromFirestore: (snapshot, _) {
+            final data = snapshot.data() ?? {};
+            data['id'] = snapshot.id;
+            data['eventId'] = eventId;
+            return ScheduleItem.fromJson(data);
+          },
+          toFirestore: (item, _) {
+            final json = item.toJson();
             json.remove('id');
             json.remove('eventId');
             return json;

@@ -121,14 +121,22 @@ service cloud.firestore {
 
         match /feedback/{feedbackId} {
           // Not moved server-side by task #6 (in scope for that task was
-          // check-in, not feedback) — the /feedback route is still an
-          // unbuilt placeholder (Text('Feedback Screen')), so there's no
-          // real client write path to migrate yet. Left as direct guest
-          // writes for whenever that screen is actually built; revisit
-          // then.
+          // check-in, not feedback) — direct guest writes, same
+          // isGuestSessionFor(orgId, eventId) scoping as check-in used to
+          // have before that task. The /feedback screen itself (task #8)
+          // calls ensureGuestSession the same way check-in does, so this
+          // works the same way for the same reason.
           allow read: if isOwnerOrAdmin(orgId);
           allow create: if isOrgMember(orgId) || isGuestSessionFor(orgId, eventId);
           allow update, delete: if isOwnerOrAdmin(orgId);
+        }
+
+        match /scheduleItems/{itemId} {
+          // The agenda (task #8) — same reasoning as event details: no
+          // PII, needed pre-auth so a guest can see "what's happening
+          // now" without checking in first. Only owner/admin manage it.
+          allow read: if true;
+          allow create, update, delete: if isOwnerOrAdmin(orgId);
         }
 
         // checkIn.ts's own bookkeeping — rate-limit counters and the

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sabha_hq/core/utils/color_utils.dart';
+import 'package:sabha_hq/features/admin_events/application/event_providers.dart';
 import 'package:sabha_hq/features/attendee_check_in/presentation/guest_activity_screen.dart';
 import '../application/phone_auth_controller.dart';
 import '../application/staff_check_in_controller.dart';
@@ -112,13 +114,24 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
     final notifier = ref.read(staffCheckInProvider.notifier);
     final guestAuthState = ref.watch(guestAuthControllerProvider);
 
+    // Event.branding was written by edit_event_screen.dart but never read
+    // anywhere until task #8 — the kiosk hardcoded 0xFFc51f43 regardless.
+    final eventState = ref.watch(
+      eventForGuestProvider((orgId: orgId, eventId: eventId)),
+    );
+    final event = eventState.valueOrNull;
+    final themeColor =
+        parseHexColor(event?.branding['primaryColor'] as String?) ??
+        const Color(0xFFc51f43);
+    final logoUrl = event?.branding['logoUrl'] as String?;
+
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
         title: const Text('Event Check-In'),
-        backgroundColor: const Color(0xFFc51f43),
+        backgroundColor: themeColor,
         foregroundColor: Colors.white,
         centerTitle: true,
       ),
@@ -131,23 +144,40 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
             ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 500),
-              child: Container(
-                padding: EdgeInsets.all(isMobile ? 20.0 : 40.0),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black12, blurRadius: 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (logoUrl != null && logoUrl.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Image.network(
+                        logoUrl,
+                        height: 64,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const SizedBox.shrink(),
+                      ),
+                    ),
                   ],
-                ),
-                child: _buildBody(
-                  uiState,
-                  notifier,
-                  guestAuthState,
-                  orgId,
-                  eventId,
-                  isMobile,
-                ),
+                  Container(
+                    padding: EdgeInsets.all(isMobile ? 20.0 : 40.0),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black12, blurRadius: 20),
+                      ],
+                    ),
+                    child: _buildBody(
+                      uiState,
+                      notifier,
+                      guestAuthState,
+                      orgId,
+                      eventId,
+                      isMobile,
+                      themeColor,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -163,6 +193,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
     String orgId,
     String eventId,
     bool isMobile,
+    Color themeColor,
   ) {
     // -------------------------------------------------------------
     // SUCCESS SCREEN (Redirecting State)
@@ -194,7 +225,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
-          const CircularProgressIndicator(color: Color(0xFFc51f43)),
+          CircularProgressIndicator(color: themeColor),
           const SizedBox(height: 16),
           const Text(
             'Taking you to the live event...',
@@ -354,7 +385,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
         Icon(
           Icons.qr_code_scanner,
           size: isMobile ? 60 : 80,
-          color: const Color(0xFFc51f43),
+          color: themeColor,
         ),
         const SizedBox(height: 16),
         Text(
@@ -390,7 +421,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                 ? null
                 : () => _submitPhone(orgId, eventId, _phoneController.text.trim()),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFc51f43),
+              backgroundColor: themeColor,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),

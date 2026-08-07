@@ -171,6 +171,28 @@ async function main() {
       await assertSucceeds(ownerA(testEnv).firestore().doc("orgs/org-a/events/evt-a2/attendees/att-a2").delete());
     });
 
+    // --- Agenda (task #8) ---
+    await check("anyone unauthenticated can read the agenda (no PII, pre-auth)", async () => {
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await ctx.firestore().doc("orgs/org-a/events/evt-a/scheduleItems/item-1").set({ title: "Opening Keynote" });
+      });
+      await assertSucceeds(
+        testEnv.unauthenticatedContext().firestore().doc("orgs/org-a/events/evt-a/scheduleItems/item-1").get()
+      );
+    });
+
+    await check("staff CANNOT write the agenda (owner/admin only)", async () => {
+      await assertFails(
+        staffA(testEnv).firestore().doc("orgs/org-a/events/evt-a/scheduleItems/item-2").set({ title: "Rogue Item" })
+      );
+    });
+
+    await check("owner CAN write the agenda", async () => {
+      await assertSucceeds(
+        ownerA(testEnv).firestore().doc("orgs/org-a/events/evt-a/scheduleItems/item-2").set({ title: "Lunch" })
+      );
+    });
+
     // --- Guest sessions: the cross-EVENT case, not just cross-org ---
     await check("a guest bound to evt-a can read evt-a's attendees", async () => {
       await assertSucceeds(guestOfEvtA(testEnv).firestore().doc("orgs/org-a/events/evt-a/attendees/att-a").get());

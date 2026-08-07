@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:sabha_hq/core/providers/current_org_provider.dart';
+import 'package:sabha_hq/core/providers/platform_role_provider.dart';
 import 'package:sabha_hq/features/admin_dashboard/application/live_feed_providers.dart';
 import 'package:sabha_hq/features/admin_org/presentation/org_onboarding_screen.dart';
 import '../../admin_auth/application/auth_controller.dart';
@@ -134,6 +135,22 @@ class _AdminScaffoldState extends ConsumerState<AdminScaffold> {
       );
     }
     if (orgIdState.value == null) {
+      // A Sabha HQ platform-staff account (functions/scripts/grant-
+      // platform-staff.js) has no orgId at all — it doesn't belong to
+      // any org. Without this check they'd land on "create an
+      // organization or accept an invite", which is wrong for them; send
+      // them to their actual dashboard instead. Deferred to a post-frame
+      // callback since navigating during build isn't safe.
+      final platformRoleState = ref.watch(platformRoleProvider);
+      if (platformRoleState.value == 'owner') {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) context.go('/platform');
+        });
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      }
+      if (platformRoleState.isLoading) {
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      }
       return const OrgOnboardingScreen();
     }
 
@@ -268,9 +285,16 @@ class _AdminScaffoldState extends ConsumerState<AdminScaffold> {
 
                 /// Main Screen Content
                 Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
-                    child: widget.child,
+                  child: Column(
+                    children: [
+                      _SuspensionBanner(),
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          child: widget.child,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -278,6 +302,39 @@ class _AdminScaffoldState extends ConsumerState<AdminScaffold> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Shown across every /dashboard screen when a Sabha HQ platform owner has
+/// suspended this org (org_detail_screen.dart's Suspend button) — reads
+/// stay open on a suspended org specifically so this can render instead
+/// of every write silently failing with no explanation. Renders nothing
+/// while active, so it's zero-height and invisible the vast majority of
+/// the time.
+class _SuspensionBanner extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final statusState = ref.watch(currentOrgStatusProvider);
+    if (statusState.valueOrNull != 'suspended') return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      color: Colors.red[700],
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: const Row(
+        children: [
+          Icon(Icons.block, color: Colors.white, size: 18),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Your organization is currently suspended — creating events, inviting '
+              'members, and guest check-in are paused. Contact Sabha HQ for details.',
+              style: TextStyle(color: Colors.white, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

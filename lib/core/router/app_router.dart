@@ -17,6 +17,9 @@ import 'package:sabha_hq/features/admin_org/presentation/accept_invite_screen.da
 import 'package:sabha_hq/features/admin_org/presentation/team_screen.dart';
 import 'package:sabha_hq/features/attendee_check_in/presentation/check_in_screen.dart';
 import 'package:sabha_hq/features/attendee_feedback/presentation/feedback_screen.dart';
+import 'package:sabha_hq/features/platform/presentation/audit_log_screen.dart';
+import 'package:sabha_hq/features/platform/presentation/org_detail_screen.dart';
+import 'package:sabha_hq/features/platform/presentation/org_directory_screen.dart';
 
 // ADDED: Import for the new Live Activity Screen
 import 'package:sabha_hq/features/admin_dashboard/presentation/live_activity_screen.dart';
@@ -65,6 +68,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       final isAdmin = user != null && user.email != null;
 
       final isGoingToAdmin = state.matchedLocation.startsWith('/dashboard');
+      final isGoingToPlatform = state.matchedLocation.startsWith('/platform');
       final isGoingToAuthScreen =
           state.matchedLocation == '/login' || state.matchedLocation == '/signup';
       final isRoot = state.matchedLocation == '/';
@@ -72,8 +76,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       if (isRoot) return '/dashboard/events';
 
       // Block non-admins (including anonymous check-in kiosk sessions) from
-      // the dashboard.
-      if (isGoingToAdmin && !isAdmin) return '/login';
+      // the dashboard, and the same base gate for /platform/* — this only
+      // checks "signed in as an admin-type account", not specifically
+      // platformRole=='owner'. That finer check is async (a claim, not
+      // just email presence) and lives in PlatformGate instead, same
+      // architectural split as AdminScaffold gating on currentOrgIdProvider
+      // rather than the router doing async claim resolution.
+      if ((isGoingToAdmin || isGoingToPlatform) && !isAdmin) return '/login';
 
       // An already-authenticated admin hitting login OR signup goes to the
       // dashboard — AdminScaffold itself decides whether that's the real
@@ -137,6 +146,23 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           final token = state.uri.queryParameters['token'];
           return AcceptInviteScreen(orgId: orgId, token: token);
         },
+      ),
+
+      // ==========================================
+      // PLATFORM BRANCH (Sabha HQ's own ops dashboard — platform-owner
+      // only, not customer-facing; see lib/features/platform/)
+      // ==========================================
+      GoRoute(
+        path: '/platform',
+        builder: (context, state) => const OrgDirectoryScreen(),
+      ),
+      GoRoute(
+        path: '/platform/orgs/:orgId',
+        builder: (context, state) => OrgDetailScreen(orgId: state.pathParameters['orgId']!),
+      ),
+      GoRoute(
+        path: '/platform/audit-log',
+        builder: (context, state) => const AuditLogScreen(),
       ),
 
       // ShellRoute keeps the Side Menu persistent while swapping inner pages

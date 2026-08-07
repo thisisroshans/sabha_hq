@@ -46,6 +46,13 @@ async function seed(testEnv) {
     await db.doc("orgs/org-b/events/evt-b/attendees/att-b").set({ name: "B Attendee", phone: "3333333333" });
 
     await db.doc("orgs/org-a/invites/tok123").set({ email: "invitee@example.com", role: "staff", status: "pending" });
+
+    // A separate, suspended org — kept apart from org-a/org-b so
+    // suspension tests can't accidentally interfere with the rest of the
+    // suite, which assumes an active org.
+    await db.collection("orgs").doc("org-c").set({ name: "Org C", status: "suspended" });
+    await db.doc("orgs/org-c/events/evt-c").set({ title: "Org C Event", location: "Hall C" });
+    await db.doc("orgs/org-c/events/evt-c/attendees/att-c").set({ name: "C Attendee", phone: "5555555555" });
   });
 }
 
@@ -70,6 +77,13 @@ function ownerB(testEnv) {
     firebase: { sign_in_provider: "password", identities: {} },
     orgId: "org-b",
     role: "owner",
+  });
+}
+
+function platformOwner(testEnv) {
+  return testEnv.authenticatedContext("platform-owner-1", {
+    firebase: { sign_in_provider: "password", identities: {} },
+    platformRole: "owner",
   });
 }
 
@@ -161,11 +175,17 @@ async function main() {
       await assertFails(staffA(testEnv).firestore().doc("orgs/org-a/events/evt-a/attendees/att-a").delete());
     });
 
-    await check("staff CANNOT create a new event (owner/admin only)", async () => {
-      await assertFails(
-        staffA(testEnv).firestore().doc("orgs/org-a/events/evt-new").set({ title: "Rogue Event" })
-      );
-    });
+    await check(
+      "NOBODY can create an event directly anymore, not even the owner (moved to the createEvent callable, functions/src/events.ts, so maxEvents can be enforced — rules can't run a count() aggregation)",
+      async () => {
+        await assertFails(
+          staffA(testEnv).firestore().doc("orgs/org-a/events/evt-new").set({ title: "Rogue Event" })
+        );
+        await assertFails(
+          ownerA(testEnv).firestore().doc("orgs/org-a/events/evt-new-2").set({ title: "Even Owner Can't" })
+        );
+      }
+    );
 
     await check("owner CAN delete an attendee", async () => {
       await assertSucceeds(ownerA(testEnv).firestore().doc("orgs/org-a/events/evt-a2/attendees/att-a2").delete());
@@ -274,6 +294,81 @@ async function main() {
         await ctx.firestore().doc("events/legacy-evt").set({ title: "Legacy" });
       });
       await assertFails(ownerA(testEnv).firestore().doc("events/legacy-evt").get());
+    });
+
+    // --- Platform owner: full READ parity with what an org's own
+    // owner/admin can see, across every org — but NOT write access, and
+    // NOT the things an org's own owner can't see either (invites,
+    // checkInLog) — that's parity, not extra access. ---
+    await check("platform owner can read org A's AND org B's docs, members, and attendees", async () => {
+      await assertSucceeds(platformOwner(testEnv).firestore().doc("orgs/org-a").get());
+      await assertSucceeds(platformOwner(testEnv).firestore().doc("orgs/org-b").get());
+      await assertSucceeds(platformOwner(testEnv).firestore().doc("orgs/org-a/members/owner-a").get());
+      await assertSucceeds(platformOwner(testEnv).firestore().doc("orgs/org-a/events/evt-a/attendees/att-a").get());
+      await assertSucceeds(platformOwner(testEnv).firestore().doc("orgs/org-b/events/evt-b/attendees/att-b").get());
+    });
+
+    await check("platform owner does NOT get write access to an org's data (view only)", async () => {
+      await assertFails(
+        platformOwner(testEnv).firestore().doc("orgs/org-a/events/evt-a/attendees/att-a")
+          .set({ isCheckedIn: true }, { merge: true })
+      );
+      await assertFails(platformOwner(testEnv).firestore().doc("orgs/org-a/events/evt-a").delete());
+    });
+
+    await check("platform owner sees only what an org owner CAN see, not extra: invites and check-in log stay closed", async () => {
+      await assertFails(platformOwner(testEnv).firestore().doc("orgs/org-a/invites/tok123").get());
+      await assertFails(platformOwner(testEnv).firestore().doc("orgs/org-a/events/evt-a/checkInLog/entry-1").get());
+    });
+
+    await check("even the platform owner cannot delete an org (no flow exists yet)", async () => {
+      await assertFails(platformOwner(testEnv).firestore().doc("orgs/org-a").delete());
+    });
+
+    // --- Suspension (org-c, seeded status:'suspended') blocks writes,
+    // not reads --- see firestore.rules' orgIsActive() and the
+    // PLATFORM DASHBOARD comment for why reads stay open.
+    await check("a suspended org's own owner can still READ their data", async () => {
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await ctx.firestore().doc("orgs/org-c/members/owner-c").set({ email: "owner-c@example.com", role: "owner" });
+      });
+      await assertSucceeds(platformOwner(testEnv).firestore().doc("orgs/org-c").get()); // sanity: doc exists
+      const ownerC = testEnv.authenticatedContext("owner-c", {
+        firebase: { sign_in_provider: "password", identities: {} },
+        orgId: "org-c",
+        role: "owner",
+      });
+      await assertSucceeds(ownerC.firestore().doc("orgs/org-c/events/evt-c").get());
+      await assertSucceeds(ownerC.firestore().doc("orgs/org-c/events/evt-c/attendees/att-c").get());
+    });
+
+    await check("a suspended org's owner CANNOT write — event update, attendee update, agenda, org rename all blocked", async () => {
+      const ownerC = testEnv.authenticatedContext("owner-c", {
+        firebase: { sign_in_provider: "password", identities: {} },
+        orgId: "org-c",
+        role: "owner",
+      });
+      await assertFails(ownerC.firestore().doc("orgs/org-c/events/evt-c").set({ title: "Renamed" }, { merge: true }));
+      await assertFails(
+        ownerC.firestore().doc("orgs/org-c/events/evt-c/attendees/att-c").set({ isCheckedIn: true }, { merge: true })
+      );
+      await assertFails(ownerC.firestore().doc("orgs/org-c/events/evt-c/scheduleItems/item-1").set({ title: "Talk" }));
+      await assertFails(ownerC.firestore().doc("orgs/org-c").set({ name: "New Name" }, { merge: true }));
+    });
+
+    // --- orgs/{orgId}.limits/status/plan are platform-controlled fields
+    // — an org's own owner can update OTHER fields (name) but not these,
+    // even though the general update rule would otherwise allow it. ---
+    await check("org owner CAN rename their own org", async () => {
+      await assertSucceeds(ownerA(testEnv).firestore().doc("orgs/org-a").set({ name: "Org A Renamed" }, { merge: true }));
+    });
+
+    await check("org owner CANNOT touch limits/status/plan directly — Admin-SDK (platform.ts) only", async () => {
+      await assertFails(
+        ownerA(testEnv).firestore().doc("orgs/org-a").set({ limits: { maxEvents: 9999 } }, { merge: true })
+      );
+      await assertFails(ownerA(testEnv).firestore().doc("orgs/org-a").set({ status: "active" }, { merge: true }));
+      await assertFails(ownerA(testEnv).firestore().doc("orgs/org-a").set({ plan: "enterprise" }, { merge: true }));
     });
 
     console.log(`\nAll ${passed} assertions passed.`);

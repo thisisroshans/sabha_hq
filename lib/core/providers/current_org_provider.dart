@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sabha_hq/features/admin_auth/application/auth_controller.dart';
 
@@ -37,4 +38,24 @@ final currentRoleProvider = FutureProvider.autoDispose<String?>((ref) async {
   if (user == null) return null;
   final tokenResult = await user.getIdTokenResult();
   return tokenResult.claims?['role'] as String?;
+});
+
+/// Live status ('active'/'suspended') of the signed-in admin's own org —
+/// so AdminScaffold can show a clear "you're suspended" banner instead of
+/// a wall of permission-denied errors the moment they try to write
+/// anything. A Stream, not a one-off read: a platform owner suspending
+/// this org while the admin already has the dashboard open should show
+/// up without them needing to refresh. firestore.rules keeps reads open
+/// on a suspended org specifically so this still works.
+final currentOrgStatusProvider = StreamProvider.autoDispose<String?>((ref) async* {
+  final orgId = await ref.watch(currentOrgIdProvider.future);
+  if (orgId == null) {
+    yield null;
+    return;
+  }
+  yield* FirebaseFirestore.instance
+      .collection('orgs')
+      .doc(orgId)
+      .snapshots()
+      .map((snap) => snap.data()?['status'] as String? ?? 'active');
 });

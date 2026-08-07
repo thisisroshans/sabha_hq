@@ -15,7 +15,9 @@
     "test:rules": "firebase emulators:exec --project sabha-hq-rules-test --only firestore \"node scripts/_test-firestore-rules.js\"",
     "test:checkin": "npm run build && firebase emulators:exec --project sabha-hq --only firestore \"node scripts/_smoke-test-checkin.js\"",
     "test:orgs": "npm run build && firebase emulators:exec --project sabha-hq --only firestore,auth \"node scripts/_smoke-test-createorg.js\"",
-    "test:platform": "npm run build && firebase emulators:exec --project sabha-hq --only firestore \"node scripts/_smoke-test-platform.js\""
+    "test:platform": "npm run build && firebase emulators:exec --project sabha-hq --only firestore \"node scripts/_smoke-test-platform.js\"",
+    "test:events": "npm run build && firebase emulators:exec --project sabha-hq --only firestore \"node scripts/_smoke-test-events.js\"",
+    "test:all": "npm run build && firebase emulators:exec --project sabha-hq --only firestore,auth \"node scripts/_smoke-test-migration.js && node scripts/_smoke-test-invites.js && node scripts/_smoke-test-checkin.js && node scripts/_smoke-test-createorg.js && node scripts/_smoke-test-platform.js && node scripts/_smoke-test-events.js\""
   },
   "engines": {
     "node": "20"

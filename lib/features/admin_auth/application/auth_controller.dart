@@ -32,6 +32,14 @@ class AuthController extends AsyncNotifier<void> {
     });
   }
 
+  Future<void> signup(String email, String password) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final repo = ref.read(authRepositoryProvider);
+      await repo.signUpWithEmail(email, password);
+    });
+  }
+
   Future<void> logout() async {
     final repo = ref.read(authRepositoryProvider);
     await repo.signOut();

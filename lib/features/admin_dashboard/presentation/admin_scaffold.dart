@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:sabha_hq/core/providers/current_org_provider.dart';
 import 'package:sabha_hq/features/admin_dashboard/application/live_feed_providers.dart';
+import 'package:sabha_hq/features/admin_org/presentation/org_onboarding_screen.dart';
 import '../../admin_auth/application/auth_controller.dart';
 
 class AdminScaffold extends ConsumerStatefulWidget {
@@ -88,6 +90,7 @@ class _AdminScaffoldState extends ConsumerState<AdminScaffold> {
     if (location.contains('/guests')) return 1;
     if (location.contains('/live')) return 2;
     if (location.contains('/analytics')) return 3;
+    if (location.contains('/team')) return 4;
     return 0;
   }
 
@@ -108,11 +111,32 @@ class _AdminScaffoldState extends ConsumerState<AdminScaffold> {
       case 3:
         context.go('/dashboard/analytics');
         break;
+
+      case 4:
+        context.go('/dashboard/team');
+        break;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final orgIdState = ref.watch(currentOrgIdProvider);
+
+    // Every child screen under /dashboard assumes a resolved org — rather
+    // than have each one separately handle "org still loading" / "no org
+    // at all", gate here once. See lib/core/providers/current_org_provider.dart.
+    if (orgIdState.isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (orgIdState.hasError) {
+      return Scaffold(
+        body: Center(child: Text('Error loading account: ${orgIdState.error}')),
+      );
+    }
+    if (orgIdState.value == null) {
+      return const OrgOnboardingScreen();
+    }
+
     final location = GoRouterState.of(context).matchedLocation;
     final selectedIndex = _getSelectedIndex(location);
 
@@ -126,8 +150,8 @@ class _AdminScaffoldState extends ConsumerState<AdminScaffold> {
               ? NavigationBar(
                   selectedIndex: selectedIndex,
                   onDestinationSelected: (index) async {
-                    // Add Logout as the 5th item on mobile
-                    if (index == 4) {
+                    // Add Logout as the 6th item on mobile
+                    if (index == 5) {
                       await ref.read(authControllerProvider.notifier).logout();
                       return;
                     }
@@ -156,6 +180,11 @@ class _AdminScaffoldState extends ConsumerState<AdminScaffold> {
                       icon: Icon(Icons.analytics_outlined),
                       selectedIcon: Icon(Icons.analytics),
                       label: 'Analytics',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.groups_outlined),
+                      selectedIcon: Icon(Icons.groups),
+                      label: 'Team',
                     ),
                     NavigationDestination(
                       icon: Icon(Icons.logout),
@@ -209,6 +238,11 @@ class _AdminScaffoldState extends ConsumerState<AdminScaffold> {
                         icon: Icon(Icons.analytics_outlined),
                         selectedIcon: Icon(Icons.analytics),
                         label: Text('Analytics'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.groups_outlined),
+                        selectedIcon: Icon(Icons.groups),
+                        label: Text('Team'),
                       ),
                     ],
                     trailing: Expanded(

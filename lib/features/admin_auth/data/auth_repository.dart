@@ -22,6 +22,16 @@ class AuthRepository {
     await _auth.signInWithEmailAndPassword(email: email, password: password);
   }
 
+  /// Create a brand new admin account. They'll have no org yet — either
+  /// createOrg (self-serve, functions/src/orgs.ts) or acceptInvite
+  /// (functions/src/invites.ts) is what actually gets them into one.
+  Future<void> signUpWithEmail(String email, String password) async {
+    await _auth.createUserWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+  }
+
   /// Sign out the current admin
   Future<void> signOut() async {
     await _auth.signOut();

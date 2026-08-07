@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../application/auth_controller.dart';
 
 class AdminLoginScreen extends ConsumerStatefulWidget {
@@ -148,6 +149,13 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
                                 'Login',
                                 style: TextStyle(fontSize: 16),
                               ),
+                      ),
+                      const SizedBox(height: 16),
+                      Center(
+                        child: TextButton(
+                          onPressed: () => context.go('/signup'),
+                          child: const Text("Don't have an account? Sign up"),
+                        ),
                       ),
                     ],
                   ),

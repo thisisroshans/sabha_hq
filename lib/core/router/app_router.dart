@@ -7,11 +7,14 @@ import 'package:go_router/go_router.dart';
 
 import 'package:sabha_hq/core/models/event.dart';
 import 'package:sabha_hq/features/admin_auth/presentation/admin_login_screen.dart';
+import 'package:sabha_hq/features/admin_auth/presentation/signup_screen.dart';
 import 'package:sabha_hq/features/admin_dashboard/presentation/admin_scaffold.dart';
 import 'package:sabha_hq/features/admin_events/presentation/create_event_screen.dart';
 import 'package:sabha_hq/features/admin_events/presentation/edit_event_screen.dart';
 import 'package:sabha_hq/features/admin_events/presentation/event_list_screen.dart';
 import 'package:sabha_hq/features/admin_guests/presentation/guest_management_screen.dart';
+import 'package:sabha_hq/features/admin_org/presentation/accept_invite_screen.dart';
+import 'package:sabha_hq/features/admin_org/presentation/team_screen.dart';
 import 'package:sabha_hq/features/attendee_check_in/presentation/check_in_screen.dart';
 
 // ADDED: Import for the new Live Activity Screen
@@ -61,7 +64,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       final isAdmin = user != null && user.email != null;
 
       final isGoingToAdmin = state.matchedLocation.startsWith('/dashboard');
-      final isGoingToLogin = state.matchedLocation == '/login';
+      final isGoingToAuthScreen =
+          state.matchedLocation == '/login' || state.matchedLocation == '/signup';
       final isRoot = state.matchedLocation == '/';
 
       if (isRoot) return '/dashboard/events';
@@ -70,8 +74,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       // the dashboard.
       if (isGoingToAdmin && !isAdmin) return '/login';
 
-      // If an admin hits login, send them to dashboard
-      if (isGoingToLogin && isAdmin) return '/dashboard/events';
+      // An already-authenticated admin hitting login OR signup goes to the
+      // dashboard — AdminScaffold itself decides whether that's the real
+      // dashboard or the org-onboarding screen, based on whether they have
+      // an orgId claim yet (see OrgOnboardingScreen).
+      if (isGoingToAuthScreen && isAdmin) return '/dashboard/events';
 
       return null;
     },
@@ -105,6 +112,24 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: '/login',
         builder: (context, state) {
           return const AdminLoginScreen();
+        },
+      ),
+      GoRoute(
+        path: '/signup',
+        builder: (context, state) {
+          return const SignupScreen();
+        },
+      ),
+      // Public — reached via a link an owner/admin shares (Team screen),
+      // not gated by isGoingToAdmin since the visitor may not be signed
+      // in yet. See AcceptInviteScreen for why it can't pre-validate the
+      // invite before the visitor authenticates.
+      GoRoute(
+        path: '/accept-invite',
+        builder: (context, state) {
+          final orgId = state.uri.queryParameters['orgId'];
+          final token = state.uri.queryParameters['token'];
+          return AcceptInviteScreen(orgId: orgId, token: token);
         },
       ),
 
@@ -141,6 +166,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/dashboard/guests',
             builder: (context, state) => const GuestManagementScreen(),
+          ),
+
+          // ------------------------------------------------
+          // SIBLING 2b: TEAM (Phase 2, task #7)
+          // ------------------------------------------------
+          GoRoute(
+            path: '/dashboard/team',
+            builder: (context, state) => const TeamScreen(),
           ),
 
           // ------------------------------------------------

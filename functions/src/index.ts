@@ -39,3 +39,6 @@ export { beginGuestSession } from "./guestSessions";
 // longer write to attendees directly (see firestore.rules and
 // check_in_repository.dart). See functions/src/checkIn.ts.
 export { checkIn, registerWalkIn } from "./checkIn";
+
+// Phase 2 / task 7: self-serve org creation. See functions/src/orgs.ts.
+export { createOrg } from "./orgs";

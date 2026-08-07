@@ -66,11 +66,11 @@ service cloud.firestore {
     match /orgs/{orgId} {
       allow read: if isOrgMember(orgId);
       allow update: if isOwnerOrAdmin(orgId);
-      // No client-side org creation/deletion yet — orgs are created today
-      // only by functions/scripts/migrate-to-orgs.js (Admin SDK, bypasses
-      // rules entirely). A real "create my org" callable is Phase 2 (self-
-      // serve signup, task #7); deletion has no flow at all yet and
-      // shouldn't be a rules-only decision.
+      // Still no CLIENT-side org creation/deletion — self-serve creation
+      // exists now (functions/src/orgs.ts's createOrg, task #7) but runs
+      // as the Admin SDK, which bypasses rules entirely, same as
+      // migrate-to-orgs.js's bootstrap path. Deletion has no flow at all
+      // yet and shouldn't be a rules-only decision.
       allow create, delete: if false;
 
       match /members/{uid} {

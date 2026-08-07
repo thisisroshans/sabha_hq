@@ -172,15 +172,27 @@ async function main() {
     });
 
     // --- Guest sessions: the cross-EVENT case, not just cross-org ---
-    await check("a guest bound to evt-a can read/write evt-a's attendees", async () => {
+    await check("a guest bound to evt-a can read evt-a's attendees", async () => {
       await assertSucceeds(guestOfEvtA(testEnv).firestore().doc("orgs/org-a/events/evt-a/attendees/att-a").get());
-      await assertSucceeds(
-        guestOfEvtA(testEnv)
-          .firestore()
-          .doc("orgs/org-a/events/evt-a/attendees/walkin-1")
-          .set({ name: "Walk In", phone: "4444444444" })
-      );
     });
+
+    await check(
+      "a guest CANNOT write attendees directly anymore (task #6: goes through checkIn/registerWalkIn instead)",
+      async () => {
+        await assertFails(
+          guestOfEvtA(testEnv)
+            .firestore()
+            .doc("orgs/org-a/events/evt-a/attendees/walkin-1")
+            .set({ name: "Walk In", phone: "4444444444" })
+        );
+        await assertFails(
+          guestOfEvtA(testEnv)
+            .firestore()
+            .doc("orgs/org-a/events/evt-a/attendees/att-a")
+            .set({ isCheckedIn: true }, { merge: true })
+        );
+      }
+    );
 
     await check(
       "a guest bound to evt-a CANNOT read evt-a2's attendees (same org, different event)",
@@ -217,6 +229,20 @@ async function main() {
 
     await check("even the owner cannot read invites directly (Admin-SDK only)", async () => {
       await assertFails(ownerA(testEnv).firestore().doc("orgs/org-a/invites/tok123").get());
+    });
+
+    await check("even the owner cannot read the check-in audit log (Admin-SDK only)", async () => {
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await ctx.firestore().doc("orgs/org-a/events/evt-a/checkInLog/entry-1").set({ uid: "guest-1", result: "checked_in" });
+      });
+      await assertFails(ownerA(testEnv).firestore().doc("orgs/org-a/events/evt-a/checkInLog/entry-1").get());
+    });
+
+    await check("even the owner cannot read rate-limit counters (Admin-SDK only)", async () => {
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await ctx.firestore().doc("orgs/org-a/events/evt-a/checkInRateLimits/guest-1").set({ attempts: [] });
+      });
+      await assertFails(ownerA(testEnv).firestore().doc("orgs/org-a/events/evt-a/checkInRateLimits/guest-1").get());
     });
 
     await check("nobody can read the legacy flat events/* tree", async () => {

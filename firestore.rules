@@ -1,22 +1,36 @@
 rules_version = '2';
 
-// TARGET rules for the org-scoped schema (see docs/saas-schema.md) —
-// NOT YET DEPLOYABLE. The live app still reads/writes the old flat
-// events/{eventId}/... paths (that cutover is task #9, tracked separately
-// and deliberately not done in this task). Deploying this file today would
-// break production, since nothing below matches those flat paths and the
-// catch-all at the bottom denies everything else. This file is committed
-// to the switch_to_saas branch to be deployed together with task #9's app
-// changes, not before.
+// TARGET rules for the org-scoped schema (see docs/saas-schema.md) — NOT
+// YET DEPLOYED. Code-complete: the Flutter app now reads/writes these
+// org-scoped paths (task #9), and Cloud Functions exist to back every
+// server-side write. But going live is a real multi-step cutover, not a
+// toggle, and none of it has been executed against production yet:
+//   1. Deploy Cloud Functions (functions/).
+//   2. Run functions/scripts/migrate-to-orgs.js for real (creates
+//      orgs/{orgId} + bootstrap owner claims — nothing below works
+//      without this having already happened).
+//   3. Deploy this rules file + firestore.indexes.json.
+//   4. Deploy the new Flutter web build.
+// In that order — deploying this file before step 2 locks everyone out
+// (no orgs/ data or claims exist yet); deploying the new app build before
+// this file means it requests paths the currently-live rules don't
+// recognize. Not attempted here per the standing "don't deploy" instruction
+// for this branch.
 //
-// The two holes this replaces (see the pre-migration version of this file
-// in git history for comparison):
+// The three holes this replaces (see git history for the pre-migration
+// version of this file):
 //   1. isAdmin() used to mean "signed in with email/password" full stop —
 //      no org check at all. Any admin, any org, could read/write/delete
 //      any event, anywhere.
 //   2. isGuestSession() let any anonymous check-in session (from ANY
 //      event's check-in link) read every event's attendee list, because
 //      the rule never looked at which event the session belonged to.
+//   3. (Closed by task #6) Any active guest session could write directly
+//      to attendees — search, check in, register a walk-in — with no
+//      server-side validation, dedup, rate limiting, or audit trail.
+//      Those writes now go exclusively through the checkIn/registerWalkIn
+//      callables (functions/src/checkIn.ts); a guest session's Firestore
+//      access is read-only.
 //
 // Fix for #1: isOrgMember()/isOwnerOrAdmin() check request.auth.token.orgId
 // against the specific org being accessed (custom claims set by
@@ -86,21 +100,49 @@ service cloud.firestore {
         allow create, update, delete: if isOwnerOrAdmin(orgId);
 
         match /attendees/{attendeeId} {
-          // Any org member (owner/admin/staff) can see and check in
-          // attendees; a guest session may only touch the one event it
+          // Any org member (owner/admin/staff) can see and manage
+          // attendees; a guest session may only READ the one event it
           // was bound to by beginGuestSession — this is the fix for hole
           // #2 above.
+          //
+          // Guests do NOT get create/update here (fix for hole #3): the
+          // kiosk's search/check-in/walk-in writes go through the
+          // checkIn/registerWalkIn callables (functions/src/checkIn.ts),
+          // which run as the Admin SDK and so bypass these rules
+          // entirely — they don't need a client-write allowance to work.
+          // Only org members write attendees directly now (CSV import,
+          // manual add/edit in the admin guest list).
           allow read: if isOrgMember(orgId) || isGuestSessionFor(orgId, eventId);
-          allow create, update: if isOrgMember(orgId) || isGuestSessionFor(orgId, eventId);
+          allow create, update: if isOrgMember(orgId);
           // Deleting an attendee record is destructive enough to reserve
           // for owner/admin — staff can check people in, not erase them.
           allow delete: if isOwnerOrAdmin(orgId);
         }
 
         match /feedback/{feedbackId} {
+          // Not moved server-side by task #6 (in scope for that task was
+          // check-in, not feedback) — the /feedback route is still an
+          // unbuilt placeholder (Text('Feedback Screen')), so there's no
+          // real client write path to migrate yet. Left as direct guest
+          // writes for whenever that screen is actually built; revisit
+          // then.
           allow read: if isOwnerOrAdmin(orgId);
           allow create: if isOrgMember(orgId) || isGuestSessionFor(orgId, eventId);
           allow update, delete: if isOwnerOrAdmin(orgId);
+        }
+
+        // checkIn.ts's own bookkeeping — rate-limit counters and the
+        // audit log it writes on every attempt. Both written exclusively
+        // by the Admin SDK (bypasses rules); no UI reads either today.
+        // Explicit deny here rather than relying silently on the
+        // catch-all at the bottom, so a future "show me the check-in
+        // audit log" screen has to consciously open this up rather than
+        // finding it already readable by accident.
+        match /checkInRateLimits/{uid} {
+          allow read, write: if false;
+        }
+        match /checkInLog/{logId} {
+          allow read, write: if false;
         }
       }
     }

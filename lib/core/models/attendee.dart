@@ -83,6 +83,23 @@ class Attendee {
     };
   }
 
+  // checkInTime arrives in two different shapes depending on the source:
+  // a real Firestore Timestamp (has .toDate()) when this map came off a
+  // document snapshot, or an ISO 8601 String when it came back from the
+  // checkIn/registerWalkIn Cloud Functions (functions/src/checkIn.ts) —
+  // a Timestamp doesn't survive a callable's JSON response, so those
+  // serialize it explicitly. Handle both rather than assuming one.
+  static DateTime? _parseCheckInTime(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    try {
+      return (value as dynamic).toDate() as DateTime;
+    } catch (_) {
+      return null;
+    }
+  }
+
   factory Attendee.fromMap(Map<String, dynamic> map, String documentId) {
     return Attendee(
       id: documentId,
@@ -92,7 +109,7 @@ class Attendee {
       email: map['email'] ?? '',
       role: map['role'] ?? 'guest',
       isCheckedIn: map['isCheckedIn'] ?? false,
-      checkInTime: map['checkInTime']?.toDate(),
+      checkInTime: _parseCheckInTime(map['checkInTime']),
       companyName: map['companyName'] ?? '',
       designation: map['designation'] ?? '',
       industry: map['industry'] ?? '',

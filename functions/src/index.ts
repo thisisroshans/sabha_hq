@@ -34,3 +34,8 @@ export { createInvite, acceptInvite } from "./invites";
 // Phase 1 / task 5: binds an anonymous guest session to one event so
 // firestore.rules can scope it. See functions/src/guestSessions.ts.
 export { beginGuestSession } from "./guestSessions";
+
+// Phase 1 / task 6: check-in moves here, off the client. Clients no
+// longer write to attendees directly (see firestore.rules and
+// check_in_repository.dart). See functions/src/checkIn.ts.
+export { checkIn, registerWalkIn } from "./checkIn";

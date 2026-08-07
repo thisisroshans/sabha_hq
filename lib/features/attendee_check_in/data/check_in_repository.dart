@@ -1,14 +1,29 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sabha_hq/core/firebase/firestore_refs.dart';
 import 'package:sabha_hq/core/models/attendee.dart';
-import 'package:sabha_hq/core/utils/phone.dart';
 
 final checkInRepositoryProvider = Provider<CheckInRepository>(
   (ref) => CheckInRepository(),
 );
 
+/// Check-in no longer writes to Firestore directly — both operations go
+/// through Cloud Functions (functions/src/checkIn.ts), which run as the
+/// Admin SDK and add validation, phone-format tolerance, rate limiting,
+/// and an audit trail (orgs/{orgId}/events/{eventId}/checkInLog) that a
+/// client-side write never could. firestore.rules denies guest sessions
+/// direct create/update on attendees now — this is the only path.
 class CheckInRepository {
+  // Must match functions' setGlobalOptions({ region: 'asia-south1' }) in
+  // functions/src/index.ts — the default region (us-central1) has
+  // nothing deployed there.
+  static const _functionsRegion = 'asia-south1';
+
+  FirebaseFunctions get _functions =>
+      FirebaseFunctions.instanceFor(region: _functionsRegion);
+
+  Map<String, dynamic> _asMap(Object? data) =>
+      Map<String, dynamic>.from(data as Map);
+
   /// Searches for a guest by phone. If found, checks them in.
   /// Returns NULL if the guest is not found (Walk-In required).
   Future<Attendee?> searchAndCheckIn(
@@ -16,43 +31,19 @@ class CheckInRepository {
     String eventId,
     String phone,
   ) async {
-    final normalizedPhone = PhoneUtils.normalize(phone);
-    final variants = PhoneUtils.lookupVariants(phone);
-    if (variants.isEmpty) return null;
+    try {
+      final result = await _functions.httpsCallable('checkIn').call(
+        {'orgId': orgId, 'eventId': eventId, 'phone': phone},
+      );
 
-    // Match every shape this number might already be stored as, so a guest
-    // imported as "+91 98765 43210" is still found when they type the bare
-    // 10 digits at the kiosk. One indexed query, not one per variant.
-    final querySnapshot = await FirestoreRefs.attendees(
-      orgId,
-      eventId,
-    ).where('phone', whereIn: variants).limit(1).get();
+      final data = _asMap(result.data);
+      if (data['found'] != true) return null;
 
-    // Not found? Return null so the controller can trigger the Walk-In registration flow.
-    if (querySnapshot.docs.isEmpty) return null;
-
-    final doc = querySnapshot.docs.first;
-    final attendee = doc.data();
-
-    // If already checked in, return the attendee so the UI can say "Welcome Back"
-    if (attendee.isCheckedIn) {
-      return attendee;
+      final attendeeMap = _asMap(data['attendee']);
+      return Attendee.fromMap(attendeeMap, attendeeMap['id'] as String);
+    } on FirebaseFunctionsException catch (e) {
+      throw Exception(e.message ?? e.code);
     }
-
-    // Check them in — and rewrite the phone to the canonical form while
-    // we're already writing, so legacy records self-heal as people arrive
-    // rather than needing a separate migration pass.
-    await doc.reference.update({
-      'isCheckedIn': true,
-      'checkInTime': FieldValue.serverTimestamp(),
-      'phone': normalizedPhone,
-    });
-
-    return attendee.copyWith(
-      isCheckedIn: true,
-      checkInTime: DateTime.now(),
-      phone: normalizedPhone,
-    );
   }
 
   /// Registers a brand new walk-in guest with full details and instantly checks them in.
@@ -66,24 +57,22 @@ class CheckInRepository {
     required String designation,
     required String industry,
   }) async {
-    final docRef = FirestoreRefs.attendees(orgId, eventId).doc();
+    try {
+      final result = await _functions.httpsCallable('registerWalkIn').call({
+        'orgId': orgId,
+        'eventId': eventId,
+        'phone': phone,
+        'name': name,
+        'email': email,
+        'companyName': companyName,
+        'designation': designation,
+        'industry': industry,
+      });
 
-    final walkInGuest = Attendee(
-      id: docRef.id,
-      eventId: eventId,
-      orgId: orgId,
-      name: name,
-      email: email,
-      phone: PhoneUtils.normalize(phone),
-      companyName: companyName,
-      designation: designation,
-      industry: industry,
-      role: 'participant',
-      isCheckedIn: true,
-      checkInTime: DateTime.now(),
-    );
-
-    await docRef.set(walkInGuest);
-    return walkInGuest;
+      final data = _asMap(result.data);
+      return Attendee.fromMap(data, data['id'] as String);
+    } on FirebaseFunctionsException catch (e) {
+      throw Exception(e.message ?? e.code);
+    }
   }
 }

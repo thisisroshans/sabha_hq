@@ -1,51 +1,67 @@
 {
-  // Example (Standard Edition):
+  // This file was previously all commented-out boilerplate — no indexes
+  // were actually defined. Two categories below:
   //
-  // "indexes": [
-  //   {
-  //     "collectionGroup": "widgets",
-  //     "queryScope": "COLLECTION",
-  //     "fields": [
-  //       { "fieldPath": "foo", "arrayConfig": "CONTAINS" },
-  //       { "fieldPath": "bar", "mode": "DESCENDING" }
-  //     ]
-  //   },
+  //   1. Indexes the app already needs TODAY, independent of the SaaS
+  //      migration (see "pre-existing gap" comments) — Firestore doesn't
+  //      auto-index collection-group queries even for a single field, so
+  //      admin_dashboard/application/live_feed_providers.dart's "all
+  //      events" branch (collectionGroup('attendees') + isCheckedIn +
+  //      orderBy(checkInTime)) has been running with no supporting index
+  //      this whole time.
+  //   2. Indexes anticipated for Phase 1 of the SaaS migration (see memory:
+  //      sabha-hq-saas-migration-plan), marked "Phase 1" below — these
+  //      reference an `orgId` field that doesn't exist on any attendee doc
+  //      yet. That's fine: Firestore lets you define an index ahead of the
+  //      field being populated, it just won't match anything until task #3
+  //      (org schema + migration) backfills it.
   //
-  //  "fieldOverrides": [
-  //    {
-  //      "collectionGroup": "widgets",
-  //      "fieldPath": "baz",
-  //      "indexes": [
-  //        { "order": "ASCENDING", "queryScope": "COLLECTION" }
-  //      ]
-  //    },
-  //   ]
-  // ]
+  // Not included: participantsStreamProvider / guestsStreamProvider in
+  // live_feed_providers.dart also filter+sort on isCheckedIn/role/
+  // checkInTime, but both providers are dead code (confirmed unreferenced
+  // anywhere in the app) — no index added for queries nothing calls.
   //
-  // Example (Enterprise Edition):
-  //
-  // "indexes": [
-  //   {
-  //     "collectionGroup": "reviews",
-  //     "queryScope": "COLLECTION_GROUP",
-  //     "apiScope": "MONGODB_COMPATIBLE_API",
-  //     "density": "DENSE",
-  //     "multikey": false,
-  //     "fields": [
-  //       { "fieldPath": "baz", "mode": "ASCENDING" }
-  //     ]
-  //   },
-  //   {
-  //     "collectionGroup": "items",
-  //     "queryScope": "COLLECTION_GROUP",
-  //     "apiScope": "MONGODB_COMPATIBLE_API",
-  //     "density": "SPARSE_ANY",
-  //     "multikey": true,
-  //     "fields": [
-  //       { "fieldPath": "baz", "mode": "ASCENDING" }
-  //     ]
-  //   },
-  // ]
-  "indexes": [],
+  // Single-field equality/orderBy on a DIRECT collection reference (not a
+  // collection group) is auto-indexed by Firestore, so none of these are
+  // needed here: events orderBy(date) [event_repository.dart], attendees
+  // orderBy(name) [guest_repository.dart], attendees where(phone whereIn)
+  // [check_in_repository.dart].
+  "indexes": [
+    {
+      // Pre-existing gap: admin "All Events" live feed
+      // (live_feed_providers.dart liveActivityStreamProvider, eventId == 'all').
+      "collectionGroup": "attendees",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "isCheckedIn", "order": "ASCENDING" },
+        { "fieldPath": "checkInTime", "order": "DESCENDING" }
+      ]
+    },
+    {
+      // Every per-event live feed / guest-activity roster query
+      // (FirestoreRefs.attendees(eventId).where(isCheckedIn).orderBy(checkInTime)).
+      // COLLECTION scope covers this for every event's attendees
+      // subcollection, not just one.
+      "collectionGroup": "attendees",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isCheckedIn", "order": "ASCENDING" },
+        { "fieldPath": "checkInTime", "order": "DESCENDING" }
+      ]
+    },
+    {
+      // Phase 1: once attendees carry a denormalised orgId (see plan),
+      // the admin's "All Events" feed must be scoped to the caller's own
+      // org, not every tenant's — this is what rules (task #5) will
+      // require alongside it.
+      "collectionGroup": "attendees",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "orgId", "order": "ASCENDING" },
+        { "fieldPath": "isCheckedIn", "order": "ASCENDING" },
+        { "fieldPath": "checkInTime", "order": "DESCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }

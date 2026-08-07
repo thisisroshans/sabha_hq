@@ -1,23 +1,14 @@
 rules_version = '2';
 
-// TARGET rules for the org-scoped schema (see docs/saas-schema.md) — NOT
-// YET DEPLOYED. Code-complete: the Flutter app now reads/writes these
-// org-scoped paths (task #9), and Cloud Functions exist to back every
-// server-side write. But going live is a real multi-step cutover, not a
-// toggle, and none of it has been executed against production yet:
-//   1. Deploy Cloud Functions (functions/).
-//   2. Run functions/scripts/migrate-to-orgs.js for real (creates
-//      orgs/{orgId} + bootstrap owner claims — nothing below works
-//      without this having already happened).
-//   3. Deploy this rules file + firestore.indexes.json.
-//   4. Deploy the new Flutter web build.
-// In that order — deploying this file before step 2 locks everyone out
-// (no orgs/ data or claims exist yet); deploying the new app build before
-// this file means it requests paths the currently-live rules don't
-// recognize. Not attempted here per the standing "don't deploy" instruction
-// for this branch.
+// LIVE production rules for the org-scoped schema (see docs/saas-schema.md)
+// — deployed to the sabha-hq project as part of the full SaaS cutover
+// (2026-08-07). The Flutter app reads/writes these org-scoped paths
+// (task #9) and every server-side write is backed by a Cloud Function.
+// Changes here need the same care as any other prod change: verify
+// against the Firestore emulator (functions/scripts/_test-firestore-rules.js,
+// `npm run test:rules`) before `firebase deploy --only firestore:rules`.
 //
-// The holes this replaces (see git history for the pre-migration
+// The holes this replaced (see git history for the pre-migration
 // version of this file):
 //   1. isAdmin() used to mean "signed in with email/password" full stop —
 //      no org check at all. Any admin, any org, could read/write/delete
@@ -104,6 +95,33 @@ service cloud.firestore {
       return !('status' in org) || org.status != 'suspended';
     }
 
+    // Defense-in-depth for the denormalised orgId field (see
+    // firestore_refs.dart's class comment): every legitimate write already
+    // sets it to the org the client is actually scoped to, so this never
+    // blocks a real write — it only blocks a forged/corrupted one. Without
+    // it, an org member could write an attendee doc under their OWN path
+    // but tag it with a DIFFERENT org's id, silently skewing that org's
+    // usage/billing count (functions/src/platform.ts's usageForOrg() does
+    // collectionGroup('attendees').where('orgId', '==', orgId)) without
+    // ever touching that org's own data directly.
+    function attendeeDataValid(orgId) {
+      return request.resource.data.orgId == orgId;
+    }
+
+    // Guest-submitted feedback (isGuestSessionFor, not just org members) is
+    // the most adversarial write surface in this file — anyone who's ever
+    // checked into an event can hit it, with no server-side validation
+    // (task #6 only moved check-in to a callable, not feedback; see the
+    // comment on the feedback match block below). rating is a 1-5 star
+    // score in the UI; comment is optional. eventId is deliberately NOT
+    // checked here — firestore_refs.dart's feedback converter strips it
+    // before writing, so the field never exists on the stored doc.
+    function feedbackDataValid() {
+      return (request.resource.data.rating is int || request.resource.data.rating is float) &&
+        request.resource.data.rating >= 1 && request.resource.data.rating <= 5 &&
+        (request.resource.data.comment == null || request.resource.data.comment is string);
+    }
+
     match /orgs/{orgId} {
       allow read: if isOrgMember(orgId) || isPlatformOwner();
       // The org's own owner/admin can rename it etc., but NOT touch
@@ -126,10 +144,18 @@ service cloud.firestore {
         // Any member can see who else is on the team; the platform owner
         // can see every org's team, same as that org's own owner can.
         allow read: if isOrgMember(orgId) || isPlatformOwner();
-        // Not actually used by any current flow — acceptInviteHandler
-        // writes this doc via the Admin SDK, which bypasses rules. Kept
-        // sane for when a "manage team" screen exists.
-        allow write: if isOwnerOrAdmin(orgId) && orgIsActive(orgId);
+        // No client write path exists — acceptInviteHandler
+        // (functions/src/invites.ts) creates this doc via the Admin SDK,
+        // which enforces the seat limit (limits.maxTeamMembers) and the
+        // invite-token flow before writing, then bypasses rules entirely.
+        // A client-write rule here, even scoped to owner/admin, would let
+        // any admin create member docs — including granting themselves
+        // role:'owner' — straight past both of those checks. Closed
+        // outright rather than "kept sane for later": write the real rule
+        // (with field-level protection on `role`, same pattern as
+        // orgs/{orgId}'s limits/status/plan exclusion below) if a client
+        // write path is ever actually built.
+        allow write: if false;
       }
 
       match /invites/{token} {
@@ -170,7 +196,7 @@ service cloud.firestore {
           // Only org members write attendees directly now (CSV import,
           // manual add/edit in the admin guest list).
           allow read: if isOrgMember(orgId) || isGuestSessionFor(orgId, eventId) || isPlatformOwner();
-          allow create, update: if isOrgMember(orgId) && orgIsActive(orgId);
+          allow create, update: if isOrgMember(orgId) && orgIsActive(orgId) && attendeeDataValid(orgId);
           // Deleting an attendee record is destructive enough to reserve
           // for owner/admin — staff can check people in, not erase them.
           allow delete: if isOwnerOrAdmin(orgId) && orgIsActive(orgId);
@@ -184,7 +210,7 @@ service cloud.firestore {
           // calls ensureGuestSession the same way check-in does, so this
           // works the same way for the same reason.
           allow read: if isOwnerOrAdmin(orgId) || isPlatformOwner();
-          allow create: if (isOrgMember(orgId) || isGuestSessionFor(orgId, eventId)) && orgIsActive(orgId);
+          allow create: if (isOrgMember(orgId) || isGuestSessionFor(orgId, eventId)) && orgIsActive(orgId) && feedbackDataValid();
           allow update, delete: if isOwnerOrAdmin(orgId) && orgIsActive(orgId);
         }
 

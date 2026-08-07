@@ -41,9 +41,12 @@ async function seed(testEnv) {
     await db.doc("orgs/org-a/events/evt-a2").set({ title: "Org A Second Event", location: "Hall A2" });
     await db.doc("orgs/org-b/events/evt-b").set({ title: "Org B Event", location: "Hall B" });
 
-    await db.doc("orgs/org-a/events/evt-a/attendees/att-a").set({ name: "A Attendee", phone: "1111111111" });
-    await db.doc("orgs/org-a/events/evt-a2/attendees/att-a2").set({ name: "A2 Attendee", phone: "2222222222" });
-    await db.doc("orgs/org-b/events/evt-b/attendees/att-b").set({ name: "B Attendee", phone: "3333333333" });
+    // orgId mirrors what firestore_refs.dart's attendee converter always
+    // writes in production — seeding it here keeps the fixture honest
+    // against attendeeDataValid()'s check below.
+    await db.doc("orgs/org-a/events/evt-a/attendees/att-a").set({ name: "A Attendee", phone: "1111111111", orgId: "org-a" });
+    await db.doc("orgs/org-a/events/evt-a2/attendees/att-a2").set({ name: "A2 Attendee", phone: "2222222222", orgId: "org-a" });
+    await db.doc("orgs/org-b/events/evt-b/attendees/att-b").set({ name: "B Attendee", phone: "3333333333", orgId: "org-b" });
 
     await db.doc("orgs/org-a/invites/tok123").set({ email: "invitee@example.com", role: "staff", status: "pending" });
 
@@ -175,6 +178,34 @@ async function main() {
       await assertFails(staffA(testEnv).firestore().doc("orgs/org-a/events/evt-a/attendees/att-a").delete());
     });
 
+    // --- attendeeDataValid(): the denormalised orgId field can't be forged ---
+    await check("staff CAN create an attendee tagged with their own org's id", async () => {
+      await assertSucceeds(
+        staffA(testEnv)
+          .firestore()
+          .doc("orgs/org-a/events/evt-a/attendees/walkin-legit")
+          .set({ name: "Legit Walk-In", phone: "6666666666", orgId: "org-a" })
+      );
+    });
+
+    await check("staff CANNOT create an attendee tagged with a DIFFERENT org's id", async () => {
+      await assertFails(
+        staffA(testEnv)
+          .firestore()
+          .doc("orgs/org-a/events/evt-a/attendees/walkin-forged")
+          .set({ name: "Forged", phone: "7777777777", orgId: "org-b" })
+      );
+    });
+
+    await check("staff CANNOT flip an existing attendee's orgId to another org", async () => {
+      await assertFails(
+        staffA(testEnv)
+          .firestore()
+          .doc("orgs/org-a/events/evt-a/attendees/att-a")
+          .set({ orgId: "org-b" }, { merge: true })
+      );
+    });
+
     await check(
       "NOBODY can create an event directly anymore, not even the owner (moved to the createEvent callable, functions/src/events.ts, so maxEvents can be enforced — rules can't run a count() aggregation)",
       async () => {
@@ -210,6 +241,54 @@ async function main() {
     await check("owner CAN write the agenda", async () => {
       await assertSucceeds(
         ownerA(testEnv).firestore().doc("orgs/org-a/events/evt-a/scheduleItems/item-2").set({ title: "Lunch" })
+      );
+    });
+
+    // --- Feedback (task #8): feedbackDataValid() bounds the one field a
+    // guest can freely choose (rating), since this is the one collection
+    // where an anonymous session gets a direct create path. ---
+    await check("a guest CAN submit valid feedback (rating 1-5, optional comment)", async () => {
+      await assertSucceeds(
+        guestOfEvtA(testEnv)
+          .firestore()
+          .doc("orgs/org-a/events/evt-a/feedback/fb-good")
+          .set({ rating: 4, comment: "Great event", submittedAt: new Date() })
+      );
+      await assertSucceeds(
+        guestOfEvtA(testEnv)
+          .firestore()
+          .doc("orgs/org-a/events/evt-a/feedback/fb-no-comment")
+          .set({ rating: 5, comment: null, submittedAt: new Date() })
+      );
+    });
+
+    await check("a guest CANNOT submit feedback with an out-of-range or non-numeric rating", async () => {
+      await assertFails(
+        guestOfEvtA(testEnv)
+          .firestore()
+          .doc("orgs/org-a/events/evt-a/feedback/fb-zero")
+          .set({ rating: 0, comment: null, submittedAt: new Date() })
+      );
+      await assertFails(
+        guestOfEvtA(testEnv)
+          .firestore()
+          .doc("orgs/org-a/events/evt-a/feedback/fb-six")
+          .set({ rating: 6, comment: null, submittedAt: new Date() })
+      );
+      await assertFails(
+        guestOfEvtA(testEnv)
+          .firestore()
+          .doc("orgs/org-a/events/evt-a/feedback/fb-string")
+          .set({ rating: "5", comment: null, submittedAt: new Date() })
+      );
+    });
+
+    await check("a guest bound to evt-a CANNOT submit feedback for a different event", async () => {
+      await assertFails(
+        guestOfEvtA(testEnv)
+          .firestore()
+          .doc("orgs/org-a/events/evt-a2/feedback/fb-wrong-event")
+          .set({ rating: 5, comment: null, submittedAt: new Date() })
       );
     });
 
@@ -271,6 +350,19 @@ async function main() {
 
     await check("even the owner cannot read invites directly (Admin-SDK only)", async () => {
       await assertFails(ownerA(testEnv).firestore().doc("orgs/org-a/invites/tok123").get());
+    });
+
+    await check("even the owner cannot write member docs directly (Admin-SDK only, via acceptInvite)", async () => {
+      await assertFails(
+        ownerA(testEnv)
+          .firestore()
+          .doc("orgs/org-a/members/self-promoted")
+          .set({ email: "sneaky@example.com", role: "owner" })
+      );
+      // Not even editing an existing member's own role.
+      await assertFails(
+        ownerA(testEnv).firestore().doc("orgs/org-a/members/owner-a").set({ role: "owner" }, { merge: true })
+      );
     });
 
     await check("even the owner cannot read the check-in audit log (Admin-SDK only)", async () => {

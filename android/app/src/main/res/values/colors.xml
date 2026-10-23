@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sabha HQ brand red (0xFFc51f43 throughout lib/) — tints the
+         check-in notification icon. -->
+    <color name="notification_accent">#C51F43</color>
+</resources>

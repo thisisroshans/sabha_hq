@@ -144,12 +144,14 @@ class GuestActionController extends AutoDisposeAsyncNotifier<void> {
 
         final name = row.isNotEmpty
             ? row[0].toString().trim()
-            : 'Unknown Guest';
+            : 'Unknown Attendee';
         final phone = row.length > 1 ? row[1].toString().trim() : '';
         final email = row.length > 2 ? row[2].toString().trim() : '';
-        final role = row.length > 3
-            ? row[3].toString().trim().toLowerCase()
-            : 'guest';
+        // Accepts "Mover"/"Pitcher" (what exports write now) as well as
+        // the legacy "guest"/"participant" in older spreadsheets.
+        final role = AttendeeRole.fromInput(
+          row.length > 3 ? row[3].toString() : '',
+        );
 
         if (phone.isNotEmpty) {
           guestsToUpload.add(
@@ -159,7 +161,7 @@ class GuestActionController extends AutoDisposeAsyncNotifier<void> {
               name: name,
               phone: PhoneUtils.normalize(phone),
               email: email,
-              role: role == 'participant' ? 'participant' : 'guest',
+              role: role,
               isCheckedIn: false,
             ),
           );

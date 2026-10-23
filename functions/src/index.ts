@@ -56,3 +56,7 @@ export {
 // Event creation moved here so maxEvents can actually be enforced — see
 // functions/src/events.ts for why rules alone can't do this.
 export { createEvent } from "./events";
+
+// Push notification to every org owner/admin on every check-in. A
+// Firestore trigger, not a callable — see functions/src/notifications.ts.
+export { notifyAdminsOnCheckIn } from "./notifications";

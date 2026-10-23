@@ -1,14 +1,15 @@
-import 'dart:js_interop';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:web/web.dart' as web;
 
+import '../../../../core/config/app_urls.dart';
 import '../../../../core/models/event.dart';
 import '../../../../core/providers/current_org_provider.dart';
+import '../../../../core/utils/file_saver.dart';
 
 class QrCodeDialog extends ConsumerWidget {
   const QrCodeDialog({super.key, required this.event});
@@ -19,8 +20,12 @@ class QrCodeDialog extends ConsumerWidget {
   // admin claims to resolve an org from (it's a signed-out/anonymous
   // guest), so orgId has to travel in the URL itself. See
   // check_in_screen.dart and app_router.dart's /check-in route.
+  //
+  // publicAppOrigin rather than Uri.base.origin: on the Android/iOS apps
+  // Uri.base has no http origin at all, which produced a QR code nobody
+  // could open. See app_urls.dart.
   String _checkInUrl(String orgId) =>
-      '${Uri.base.origin}/check-in?orgId=$orgId&eventId=${event.id}';
+      '$publicAppOrigin/check-in?orgId=$orgId&eventId=${event.id}';
 
   Future<void> _downloadQrCode(BuildContext context, String checkInUrl) async {
     try {
@@ -60,36 +65,29 @@ class QrCodeDialog extends ConsumerWidget {
 
       final Uint8List bytes = byteData.buffer.asUint8List();
 
-      // Create blob
-      final blob = web.Blob(
-        [bytes.toJS].toJS,
-        web.BlobPropertyBag(type: 'image/png'),
+      if (!context.mounted) return;
+
+      // Browser download on web, native share sheet on Android/iOS — see
+      // file_saver.dart.
+      await saveFile(
+        context: context,
+        bytes: bytes,
+        fileName: 'event_qr_${event.id}.png',
+        mimeType: 'image/png',
       );
-
-      // Create downloadable URL
-      final url = web.URL.createObjectURL(blob);
-
-      // Create hidden anchor
-      final anchor = web.HTMLAnchorElement()
-        ..href = url
-        ..download = 'event_qr_${event.id}.png'
-        ..style.display = 'none';
-
-      // Append -> Click -> Remove
-      web.document.body?.append(anchor);
-      anchor.click();
-      anchor.remove();
-
-      // Cleanup memory
-      web.URL.revokeObjectURL(url);
 
       if (!context.mounted) return;
 
-      _showSnackBar(
-        context,
-        message: 'QR downloaded successfully',
-        color: Colors.green,
-      );
+      // The share sheet is its own confirmation on mobile (and the user
+      // may well have cancelled it) — only the silent browser download
+      // needs a "it worked" toast.
+      if (kIsWeb) {
+        _showSnackBar(
+          context,
+          message: 'QR downloaded successfully',
+          color: Colors.green,
+        );
+      }
     } catch (e) {
       debugPrint('QR DOWNLOAD ERROR: $e');
 
@@ -256,14 +254,23 @@ class QrCodeDialog extends ConsumerWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: FilledButton.icon(
-                            onPressed: () =>
-                                _downloadQrCode(context, checkInUrl),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFFc51f43),
+                          // Builder so the share sheet anchors to this
+                          // button on iPad, not to the whole dialog.
+                          child: Builder(
+                            builder: (buttonContext) => FilledButton.icon(
+                              onPressed: () =>
+                                  _downloadQrCode(buttonContext, checkInUrl),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFFc51f43),
+                              ),
+                              icon: const Icon(
+                                kIsWeb ? Icons.download : Icons.share,
+                                size: 18,
+                              ),
+                              label: const Text(
+                                kIsWeb ? 'Download QR' : 'Share QR',
+                              ),
                             ),
-                            icon: const Icon(Icons.download, size: 18),
-                            label: const Text('Download QR'),
                           ),
                         ),
                         Expanded(

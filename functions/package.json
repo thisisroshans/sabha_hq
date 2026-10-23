@@ -17,7 +17,8 @@
     "test:orgs": "npm run build && firebase emulators:exec --project sabha-hq --only firestore,auth \"node scripts/_smoke-test-createorg.js\"",
     "test:platform": "npm run build && firebase emulators:exec --project sabha-hq --only firestore \"node scripts/_smoke-test-platform.js\"",
     "test:events": "npm run build && firebase emulators:exec --project sabha-hq --only firestore \"node scripts/_smoke-test-events.js\"",
-    "test:all": "npm run build && firebase emulators:exec --project sabha-hq --only firestore,auth \"node scripts/_smoke-test-migration.js && node scripts/_smoke-test-invites.js && node scripts/_smoke-test-checkin.js && node scripts/_smoke-test-createorg.js && node scripts/_smoke-test-platform.js && node scripts/_smoke-test-events.js\""
+    "test:notifications": "npm run build && firebase emulators:exec --project sabha-hq --only firestore \"node scripts/_smoke-test-notifications.js\"",
+    "test:all": "npm run build && firebase emulators:exec --project sabha-hq --only firestore,auth \"node scripts/_smoke-test-migration.js && node scripts/_smoke-test-invites.js && node scripts/_smoke-test-checkin.js && node scripts/_smoke-test-createorg.js && node scripts/_smoke-test-platform.js && node scripts/_smoke-test-events.js && node scripts/_smoke-test-notifications.js\""
   },
   "engines": {
     "node": "20"

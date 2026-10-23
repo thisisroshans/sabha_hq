@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sabha_hq/core/config/app_urls.dart';
 import 'package:sabha_hq/core/providers/current_org_provider.dart';
 
 const _functionsRegion = 'asia-south1';
@@ -75,7 +76,9 @@ class InviteController extends AutoDisposeAsyncNotifier<void> {
       final token = data['token'] as String;
 
       state = const AsyncData(null);
-      return '${Uri.base.origin}/accept-invite?orgId=$orgId&token=$token';
+      // publicAppOrigin, not Uri.base.origin — the latter isn't an http
+      // origin on the Android/iOS apps. See app_urls.dart.
+      return '$publicAppOrigin/accept-invite?orgId=$orgId&token=$token';
     } on FirebaseFunctionsException catch (e) {
       state = AsyncError(Exception(e.message ?? e.code), StackTrace.current);
       return null;

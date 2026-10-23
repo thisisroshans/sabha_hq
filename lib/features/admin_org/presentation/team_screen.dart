@@ -17,6 +17,9 @@ class TeamScreen extends ConsumerWidget {
         builder: (dialogContext, setDialogState) {
           return AlertDialog(
             title: const Text('Invite Team Member'),
+            // Scrollable so the open keyboard on a phone can't push the
+            // role picker and buttons off-screen (overflow).
+            scrollable: true,
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -83,6 +86,7 @@ class TeamScreen extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Invite Created'),
+        scrollable: true,
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

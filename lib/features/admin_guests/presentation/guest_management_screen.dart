@@ -1,13 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:sabha_hq/core/models/attendee.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:web/web.dart' as web;
+import 'package:sabha_hq/core/utils/file_saver.dart';
 
 import '../../admin_events/application/event_providers.dart';
 import '../application/guest_providers.dart';
@@ -15,37 +13,23 @@ import '../application/guest_providers.dart';
 class GuestManagementScreen extends ConsumerWidget {
   const GuestManagementScreen({super.key});
 
-  /// Universal file save/share method for both Web and Mobile
+  /// Browser download on web, native share sheet on Android/iOS — see
+  /// file_saver.dart. (This used to call package:web directly, which
+  /// doesn't compile for Android/iOS at all.)
   Future<void> _saveAndShareCsv({
     required BuildContext context,
     required String csvContent,
     required String fileName,
-  }) async {
-    if (kIsWeb) {
-      // --- Web Implementation ---
-      final bytes = utf8.encode(csvContent);
-      final base64data = base64Encode(bytes);
-      final anchor = web.HTMLAnchorElement()
-        ..href = 'data:text/csv;charset=utf-8;base64,$base64data'
-        ..download = fileName;
-
-      web.document.body?.append(anchor);
-      anchor.click();
-      anchor.remove();
-    } else {
-      // --- Mobile Implementation (Android / iOS) ---
-      final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/$fileName');
-      await file.writeAsString(csvContent);
-
-      // Trigger native share sheet on mobile so users can save or send the CSV file
-      await Share.shareXFiles([
-        XFile(file.path),
-      ], text: 'Exported Guest List CSV');
-    }
+  }) {
+    return saveFile(
+      context: context,
+      bytes: Uint8List.fromList(utf8.encode(csvContent)),
+      fileName: fileName,
+      mimeType: 'text/csv',
+    );
   }
 
-  void _downloadCsvTemplate(BuildContext context) {
+  Future<void> _downloadCsvTemplate(BuildContext context) async {
     final List<List<dynamic>> csvData = [
       [
         'Name',
@@ -61,29 +45,29 @@ class GuestManagementScreen extends ConsumerWidget {
     ];
 
     final String csvContent = Csv().encode(csvData);
-    final bytes = utf8.encode(csvContent);
-    final base64data = base64Encode(bytes);
-    final anchor = web.HTMLAnchorElement()
-      ..href = 'data:text/csv;charset=utf-8;base64,$base64data'
-      ..download = 'sabha_guest_template.csv';
 
-    web.document.body?.append(anchor);
-    anchor.click();
-    anchor.remove();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Template downloaded!'),
-        backgroundColor: Colors.green,
-      ),
+    await _saveAndShareCsv(
+      context: context,
+      csvContent: csvContent,
+      fileName: 'sabha_attendee_template.csv',
     );
+
+    // The share sheet is its own confirmation on mobile.
+    if (kIsWeb && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Template downloaded!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
   }
 
   void _exportGuestsToCsv(BuildContext context, List<Attendee> guests) async {
     if (guests.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No guests to export!'),
+          content: Text('No attendees to export!'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -108,7 +92,10 @@ class GuestManagementScreen extends ConsumerWidget {
             g.name,
             g.phone,
             g.email,
-            g.role,
+            // Exported as the label admins see (Mover/Pitcher);
+            // importGuestsFromCsv reads both these and the stored values
+            // back, so an export still round-trips. See AttendeeRole.
+            g.roleLabel,
             g.companyName,
             g.designation,
             g.industry,
@@ -123,10 +110,10 @@ class GuestManagementScreen extends ConsumerWidget {
       await _saveAndShareCsv(
         context: context,
         csvContent: csvContent,
-        fileName: 'sabha_guest_export.csv',
+        fileName: 'sabha_attendee_export.csv',
       );
 
-      if (context.mounted) {
+      if (kIsWeb && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Export successful!'),
@@ -150,7 +137,7 @@ class GuestManagementScreen extends ConsumerWidget {
     final nameController = TextEditingController();
     final emailController = TextEditingController();
     final phoneController = TextEditingController();
-    String selectedRole = 'guest';
+    String selectedRole = AttendeeRole.mover;
 
     showDialog(
       context: context,
@@ -173,17 +160,21 @@ class GuestManagementScreen extends ConsumerWidget {
               TextField(
                 controller: phoneController,
                 decoration: const InputDecoration(labelText: 'Phone Number'),
+                keyboardType: TextInputType.phone,
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: selectedRole,
                 decoration: const InputDecoration(labelText: 'Role'),
-                items: const [
-                  DropdownMenuItem(value: 'guest', child: Text('Guest')),
-                  DropdownMenuItem(
-                    value: 'participant',
-                    child: Text('Participant'),
-                  ),
+                items: [
+                  for (final role in const [
+                    AttendeeRole.mover,
+                    AttendeeRole.pitcher,
+                  ])
+                    DropdownMenuItem(
+                      value: role,
+                      child: Text(AttendeeRole.label(role)),
+                    ),
                 ],
                 onChanged: (val) => selectedRole = val!,
               ),
@@ -223,7 +214,7 @@ class GuestManagementScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Guest Directory'),
+        title: const Text('Attendee Directory'),
         actions: [
           // On mobile screens, move quick CSV actions to the AppBar overflow menu
           if (selectedEventId != null)
@@ -303,6 +294,9 @@ class GuestManagementScreen extends ConsumerWidget {
                         });
 
                         return DropdownButtonFormField<String>(
+                          // Without this the field sizes itself to the
+                          // longest event title and overflows on phones.
+                          isExpanded: true,
                           initialValue: isValidSelection
                               ? selectedEventId
                               : null,
@@ -362,7 +356,7 @@ class GuestManagementScreen extends ConsumerWidget {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
-                                      'Successfully imported $count guests!',
+                                      'Successfully imported $count attendees!',
                                     ),
                                     backgroundColor: Colors.green,
                                   ),
@@ -427,7 +421,7 @@ class GuestManagementScreen extends ConsumerWidget {
                 Expanded(
                   child: selectedEventId == null
                       ? const Center(
-                          child: Text('Select an event to view guests'),
+                          child: Text('Select an event to view attendees'),
                         )
                       : guestsState.when(
                           loading: () =>
@@ -436,7 +430,7 @@ class GuestManagementScreen extends ConsumerWidget {
                           data: (guests) {
                             if (guests.isEmpty) {
                               return const Center(
-                                child: Text('No guests added yet.'),
+                                child: Text('No attendees added yet.'),
                               );
                             }
 
@@ -471,7 +465,7 @@ class GuestManagementScreen extends ConsumerWidget {
                                       ),
                                     ),
                                     subtitle: Text(
-                                      '${guest.phone} • ${guest.role.toUpperCase()}',
+                                      '${guest.phone} • ${guest.roleLabel.toUpperCase()}',
                                     ),
                                     trailing: IconButton(
                                       icon: const Icon(
@@ -524,7 +518,7 @@ class GuestManagementScreen extends ConsumerWidget {
           : FloatingActionButton.extended(
               onPressed: () => _showAddGuestDialog(context, ref),
               icon: const Icon(Icons.person_add),
-              label: const Text('Add Guest'),
+              label: const Text('Add Attendee'),
             ),
     );
   }

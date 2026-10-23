@@ -24,6 +24,12 @@ orgs/{orgId}/members/{uid}
   role: 'owner' | 'admin' | 'staff'
   joinedAt: Timestamp
 
+orgs/{orgId}/members/{uid}/devices/{fcmToken}   — check-in push notifications
+  platform: 'android' | 'ios' | 'web'
+  updatedAt: Timestamp
+  — written by the member's own app (self-service only, see firestore.rules);
+    read by functions/src/notifications.ts to push every check-in to owners/admins
+
 orgs/{orgId}/events/{eventId}          — same Event model/fields as today, unchanged
 orgs/{orgId}/events/{eventId}/attendees/{id}
   — same Attendee model, PLUS a new denormalised `orgId` field (see below)

@@ -157,13 +157,13 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
               icon: Icons.people,
             ),
             _StatTile(
-              title: 'Guests',
-              value: metrics.guests,
+              title: 'Movers',
+              value: metrics.movers,
               icon: Icons.person_outline,
             ),
             _StatTile(
-              title: 'Participants',
-              value: metrics.participants,
+              title: 'Pitchers',
+              value: metrics.pitchers,
               icon: Icons.star_border,
             ),
           ],

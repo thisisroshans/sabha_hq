@@ -74,58 +74,63 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Create New Event')),
+      // Scrollable: on a phone the soft keyboard takes roughly half the
+      // screen, and this fixed column overflowed (yellow/black stripes)
+      // underneath it — worst on smaller iPhones and in landscape.
       body: Center(
-        child: Container(
-          width: 500,
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextFormField(
-                  controller: _titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Event Title',
-                    border: OutlineInputBorder(),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextFormField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Event Title',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) =>
+                        value != null && value.isNotEmpty ? null : 'Required',
                   ),
-                  validator: (value) =>
-                      value != null && value.isNotEmpty ? null : 'Required',
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _locationController,
-                  decoration: const InputDecoration(
-                    labelText: 'Location / Venue',
-                    border: OutlineInputBorder(),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _locationController,
+                    decoration: const InputDecoration(
+                      labelText: 'Location / Venue',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) =>
+                        value != null && value.isNotEmpty ? null : 'Required',
                   ),
-                  validator: (value) =>
-                      value != null && value.isNotEmpty ? null : 'Required',
-                ),
-                const SizedBox(height: 16),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    _selectedDate == null
-                        ? 'No date selected'
-                        : 'Date: ${_selectedDate!.month}/${_selectedDate!.day}/${_selectedDate!.year}',
+                  const SizedBox(height: 16),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      _selectedDate == null
+                          ? 'No date selected'
+                          : 'Date: ${_selectedDate!.month}/${_selectedDate!.day}/${_selectedDate!.year}',
+                    ),
+                    trailing: ElevatedButton(
+                      onPressed: _pickDate,
+                      child: const Text('Select Date'),
+                    ),
                   ),
-                  trailing: ElevatedButton(
-                    onPressed: _pickDate,
-                    child: const Text('Select Date'),
+                  const SizedBox(height: 32),
+                  ElevatedButton(
+                    onPressed: actionState.isLoading ? null : _submit,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: actionState.isLoading
+                        ? const CircularProgressIndicator()
+                        : const Text('Save Event'),
                   ),
-                ),
-                const SizedBox(height: 32),
-                ElevatedButton(
-                  onPressed: actionState.isLoading ? null : _submit,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: actionState.isLoading
-                      ? const CircularProgressIndicator()
-                      : const Text('Save Event'),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

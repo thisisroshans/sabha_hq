@@ -93,11 +93,11 @@ class LiveActivityScreen extends ConsumerWidget {
                     data: (attendees) {
                       final events = eventsState.valueOrNull ?? [];
 
-                      final guests = attendees
-                          .where((a) => a.role.toLowerCase() != 'participant')
+                      final movers = attendees
+                          .where((a) => !a.isPitcher)
                           .toList();
-                      final participants = attendees
-                          .where((a) => a.role.toLowerCase() == 'participant')
+                      final pitchers = attendees
+                          .where((a) => a.isPitcher)
                           .toList();
 
                       // Flex changes direction based on screen width
@@ -105,13 +105,13 @@ class LiveActivityScreen extends ConsumerWidget {
                         direction: isMobile ? Axis.vertical : Axis.horizontal,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // GUESTS
+                          // MOVERS (stored role: 'guest')
                           Expanded(
                             child: _buildColumn(
-                              title: 'Guests (${guests.length})',
+                              title: 'Movers (${movers.length})',
                               icon: Icons.person,
                               color: Colors.green,
-                              attendees: guests,
+                              attendees: movers,
                               events: events,
                               ref: ref,
                             ),
@@ -122,13 +122,13 @@ class LiveActivityScreen extends ConsumerWidget {
                             height: isMobile ? 24 : 0,
                           ),
 
-                          // PARTICIPANTS
+                          // PITCHERS (stored role: 'participant')
                           Expanded(
                             child: _buildColumn(
-                              title: 'Participants (${participants.length})',
+                              title: 'Pitchers (${pitchers.length})',
                               icon: Icons.stars,
                               color: Colors.deepPurple,
-                              attendees: participants,
+                              attendees: pitchers,
                               events: events,
                               ref: ref,
                             ),
@@ -230,17 +230,14 @@ class LiveActivityScreen extends ConsumerWidget {
         .firstOrNull;
     final eventTitle = matchingEvent?.title ?? 'Unknown Event';
 
-    final roleDisplay = guest.role.isNotEmpty
-        ? '${guest.role[0].toUpperCase()}${guest.role.substring(1).toLowerCase()}'
-        : 'Guest';
+    // Name tag — "Mover"/"Pitcher", see AttendeeRole.
+    final roleDisplay = guest.roleLabel;
 
     return ListTile(
       isThreeLine: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: CircleAvatar(
-        backgroundColor: guest.role.toLowerCase() == 'participant'
-            ? Colors.deepPurple
-            : Colors.green,
+        backgroundColor: guest.isPitcher ? Colors.deepPurple : Colors.green,
         child: const Icon(Icons.how_to_reg, color: Colors.white, size: 20),
       ),
       title: RichText(

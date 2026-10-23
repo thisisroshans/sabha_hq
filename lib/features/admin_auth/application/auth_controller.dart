@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sabha_hq/core/notifications/check_in_notifications.dart';
 import '../data/auth_repository.dart';
 
 // 1. Expose the authentication stream
@@ -41,6 +42,12 @@ class AuthController extends AsyncNotifier<void> {
   }
 
   Future<void> logout() async {
+    // Before signOut, not after — removing this device's push registration
+    // is a write only the signed-in member is allowed to make. Otherwise a
+    // shared phone/laptop keeps getting this org's check-in notifications
+    // after its admin has logged out.
+    await CheckInNotifications.instance.unregister();
+
     final repo = ref.read(authRepositoryProvider);
     await repo.signOut();
   }

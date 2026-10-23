@@ -1,6 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Only the debug/profile manifests declared INTERNET, which Flutter's
+         tooling merges in for development builds — so debug builds talked
+         to Firebase fine and a release build couldn't reach it at all. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Android 13+ needs this declared (and granted at runtime — see
+         check_in_notifications.dart's requestPermission) before any
+         check-in push notification can be shown. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
     <application
-        android:label="sabha_hq"
+        android:label="Sabha HQ"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -30,6 +39,18 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Check-in push notifications: channel (created in MainActivity.kt),
+             monochrome status-bar icon, and accent colour (the app's
+             #c51f43 brand red). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="check_ins" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_accent" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

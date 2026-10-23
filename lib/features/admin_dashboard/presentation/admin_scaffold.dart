@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:sabha_hq/core/notifications/check_in_notifications.dart';
 import 'package:sabha_hq/core/providers/current_org_provider.dart';
 import 'package:sabha_hq/core/providers/platform_role_provider.dart';
 import 'package:sabha_hq/features/admin_dashboard/application/live_feed_providers.dart';
@@ -22,22 +23,43 @@ class _AdminScaffoldState extends ConsumerState<AdminScaffold> {
   void initState() {
     super.initState();
 
+    // Register this device for check-in push notifications as soon as the
+    // admin's org resolves (see check_in_notifications.dart). register()
+    // is idempotent, so firing on every resolution is fine.
+    ref.listenManual(currentOrgIdProvider, (_, next) {
+      final orgId = next.valueOrNull;
+      final uid = ref.read(authStateProvider).valueOrNull?.uid;
+      if (orgId == null || uid == null) return;
+      CheckInNotifications.instance.register(orgId: orgId, uid: uid);
+    }, fireImmediately: true);
+
     /// Listen once during widget lifecycle
     /// Prevents duplicate listeners on rebuilds
+    ///
+    /// The foreground half of "notify the admin on every check-in" — push
+    /// notifications cover the app being in the background or closed.
     ref.listenManual(liveActivityStreamProvider, (previous, next) {
-      final previousList = previous?.value ?? [];
-      final nextList = next.value ?? [];
+      // Only diff two settled snapshots. The first one after the dashboard
+      // opens — or after the live feed's event filter changes, which
+      // re-subscribes the stream — is history, not news; announcing it
+      // used to pop a "just checked in!" for someone who'd checked in
+      // hours earlier every time the dashboard loaded.
+      if (previous == null || previous.isLoading || next.isLoading) return;
+      final previousList = previous.valueOrNull;
+      final nextList = next.valueOrNull;
+      if (previousList == null || nextList == null) return;
 
-      /// No new data
-      if (nextList.isEmpty) return;
+      // Everyone new in this snapshot, not just the newest — two check-ins
+      // landing in the same snapshot used to announce only one of them.
+      final seen = previousList.map((a) => a.id).toSet();
+      final arrivals = nextList.where((a) => !seen.contains(a.id)).toList();
+      if (arrivals.isEmpty) return;
 
-      /// Detect newly checked-in guest
-      final hasNewCheckIn =
-          previousList.isEmpty || previousList.first.id != nextList.first.id;
-
-      if (!hasNewCheckIn) return;
-
-      final newGuest = nextList.first;
+      final newGuest = arrivals.first;
+      final message = arrivals.length == 1
+          ? '${newGuest.name} (${newGuest.roleLabel}) just checked in!'
+          : '${newGuest.name} and ${arrivals.length - 1} '
+                '${arrivals.length == 2 ? 'other' : 'others'} just checked in!';
 
       /// Prevent snackbar errors if widget is disposed
       if (!mounted) return;
@@ -73,7 +95,7 @@ class _AdminScaffoldState extends ConsumerState<AdminScaffold> {
               const SizedBox(width: 14),
               Expanded(
                 child: Text(
-                  '${newGuest.name} just checked in!',
+                  message,
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 15,
@@ -159,19 +181,52 @@ class _AdminScaffoldState extends ConsumerState<AdminScaffold> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isMobile = constraints.maxWidth < 800; // Breakpoint for mobile
+        // Breakpoint for mobile. A phone turned landscape is wide enough
+        // for the rail but nowhere near tall enough for it — the logo plus
+        // five destinations plus logout overflowed an iPhone's ~390pt
+        // landscape height — so short screens get the bottom bar too.
+        final isMobile =
+            constraints.maxWidth < 800 || constraints.maxHeight < 500;
 
         return Scaffold(
           // Mobile Bottom Navigation Bar
           bottomNavigationBar: isMobile
               ? NavigationBar(
                   selectedIndex: selectedIndex,
+                  // Six labels don't fit side by side on a narrow phone
+                  // (iPhone SE / compact Android are ~320-360pt wide) —
+                  // they wrap or clip. Label only the current tab there.
+                  labelBehavior: constraints.maxWidth < 400
+                      ? NavigationDestinationLabelBehavior.onlyShowSelected
+                      : NavigationDestinationLabelBehavior.alwaysShow,
                   onDestinationSelected: (index) async {
                     // Add Logout as the 6th item on mobile
                     if (index == 5) {
+                      // It sits right next to Team in a thumb-sized bar —
+                      // confirm rather than log out on a stray tap.
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (dialogContext) => AlertDialog(
+                          title: const Text('Log out?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.pop(dialogContext, false),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.pop(dialogContext, true),
+                              child: const Text('Log out'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm != true) return;
                       await ref.read(authControllerProvider.notifier).logout();
                       return;
                     }
+                    if (!context.mounted) return;
                     _onDestinationSelected(context, index);
                   },
                   destinations: const [
@@ -183,7 +238,7 @@ class _AdminScaffoldState extends ConsumerState<AdminScaffold> {
                     NavigationDestination(
                       icon: Icon(Icons.people_outline),
                       selectedIcon: Icon(Icons.people),
-                      label: 'Guests',
+                      label: 'Attendees',
                     ),
                     NavigationDestination(
                       icon: Badge(
@@ -237,7 +292,7 @@ class _AdminScaffoldState extends ConsumerState<AdminScaffold> {
                       NavigationRailDestination(
                         icon: Icon(Icons.people_outline),
                         selectedIcon: Icon(Icons.people),
-                        label: Text('Guests'),
+                        label: Text('Attendees'),
                       ),
                       NavigationRailDestination(
                         icon: Badge(
@@ -329,7 +384,7 @@ class _SuspensionBanner extends ConsumerWidget {
           Expanded(
             child: Text(
               'Your organization is currently suspended — creating events, inviting '
-              'members, and guest check-in are paused. Contact Sabha HQ for details.',
+              'members, and attendee check-in are paused. Contact Sabha HQ for details.',
               style: TextStyle(color: Colors.white, fontSize: 13),
             ),
           ),

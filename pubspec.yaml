@@ -15,6 +15,9 @@ dependencies:
   firebase_auth: ^4.17.0
   cloud_firestore: ^4.15.0
   cloud_functions: ^4.7.0
+  # Check-in push notifications to org owners/admins — 14.9.x is the line
+  # that pairs with firebase_core 2.32 (see functions/src/notifications.ts).
+  firebase_messaging: ^14.9.4
   
   # --- Routing ---
   go_router: ^17.2.3

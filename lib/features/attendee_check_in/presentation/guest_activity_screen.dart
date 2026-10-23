@@ -87,110 +87,120 @@ class GuestActivityScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isMobile = constraints.maxWidth < 800;
-                    return eventState.when(
-                      error: (error, stackTrace) => Text('Error: $error'),
-                      loading: () =>
-                          const Center(child: CircularProgressIndicator()),
-                      data: (event) {
-                        if (event == null) {
-                          return const Center(child: Text('Event not found'));
-                        }
-                        return Padding(
-                          padding: EdgeInsets.all(isMobile ? 16.0 : 24.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // AGENDA — "happening now" banner (task #8).
-                              // schedule_item.dart existed fully modelled
-                              // with zero UI until this task.
-                              scheduleState.when(
-                                loading: () => const SizedBox.shrink(),
-                                error: (e, st) => const SizedBox.shrink(),
-                                data: (items) => _buildAgendaBanner(
-                                  context: context,
-                                  items: items,
-                                  themeColor: themeColor,
-                                ),
-                              ),
-                              SizedBox(height: isMobile ? 16 : 24),
-
-                              // SPLIT LIVE FEED LIST
-                              Expanded(
-                                child: liveFeedState.when(
-                                  // Loading more (limit bump from scrolling
-                                  // to the bottom) re-subscribes the stream,
-                                  // which briefly re-enters "loading" — keep
-                                  // showing the current list instead of
-                                  // flashing a spinner and losing scroll
-                                  // position. Only spinner-block on the very
-                                  // first load, when there's no data yet.
-                                  skipLoadingOnReload: true,
-                                  loading: () => const Center(
-                                    child: CircularProgressIndicator(),
+      // SafeArea: the roster runs to the bottom of the screen, and without
+      // it the last row sat under the iPhone home indicator / Android
+      // gesture bar. The outer padding is also trimmed on phones — it
+      // stacked with the inner mobile padding below to ~40pt a side,
+      // squeezing every name tag on a 360pt-wide screen.
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.all(
+              MediaQuery.sizeOf(context).width < 600 ? 8.0 : 24.0,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isMobile = constraints.maxWidth < 800;
+                      return eventState.when(
+                        error: (error, stackTrace) => Text('Error: $error'),
+                        loading: () =>
+                            const Center(child: CircularProgressIndicator()),
+                        data: (event) {
+                          if (event == null) {
+                            return const Center(child: Text('Event not found'));
+                          }
+                          return Padding(
+                            padding: EdgeInsets.all(isMobile ? 16.0 : 24.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // AGENDA — "happening now" banner (task #8).
+                                // schedule_item.dart existed fully modelled
+                                // with zero UI until this task.
+                                scheduleState.when(
+                                  loading: () => const SizedBox.shrink(),
+                                  error: (e, st) => const SizedBox.shrink(),
+                                  data: (items) => _buildAgendaBanner(
+                                    context: context,
+                                    items: items,
+                                    themeColor: themeColor,
                                   ),
-                                  error: (e, st) => Center(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(24.0),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.wifi_off_rounded,
-                                            size: 40,
-                                            color: Colors.grey[400],
-                                          ),
-                                          const SizedBox(height: 12),
-                                          Text(
-                                            "Couldn't load the live feed.",
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600,
-                                              color: Colors.grey[700],
+                                ),
+                                SizedBox(height: isMobile ? 16 : 24),
+
+                                // SPLIT LIVE FEED LIST
+                                Expanded(
+                                  child: liveFeedState.when(
+                                    // Loading more (limit bump from scrolling
+                                    // to the bottom) re-subscribes the stream,
+                                    // which briefly re-enters "loading" — keep
+                                    // showing the current list instead of
+                                    // flashing a spinner and losing scroll
+                                    // position. Only spinner-block on the very
+                                    // first load, when there's no data yet.
+                                    skipLoadingOnReload: true,
+                                    loading: () => const Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                    error: (e, st) => Center(
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(24.0),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.wifi_off_rounded,
+                                              size: 40,
+                                              color: Colors.grey[400],
                                             ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            'Check your connection and try again.',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: Colors.grey[500],
+                                            const SizedBox(height: 12),
+                                            Text(
+                                              "Couldn't load the live feed.",
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.grey[700],
+                                              ),
                                             ),
-                                          ),
-                                        ],
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'Check your connection and try again.',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.grey[500],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
+                                    data: (attendees) {
+                                      return _buildColumn(
+                                        title:
+                                            'Checked In (${attendees.length})',
+                                        icon: Icons.how_to_reg,
+                                        color: themeColor,
+                                        attendees: attendees,
+                                        events: event,
+                                        ref: ref,
+                                      );
+                                    },
                                   ),
-                                  data: (attendees) {
-                                    return _buildColumn(
-                                      title: 'Checked In (${attendees.length})',
-                                      icon: Icons.how_to_reg,
-                                      color: themeColor,
-                                      attendees: attendees,
-                                      events: event,
-                                      ref: ref,
-                                    );
-                                  },
                                 ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    );
-                  },
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -380,7 +390,7 @@ Widget _buildColumn({
 }
 
 Widget _buildAttendeeTile(Attendee guest, Event? events) {
-  final isParticipant = guest.role.toLowerCase() == 'participant';
+  final isPitcher = guest.isPitcher;
 
   final timeString = guest.checkInTime != null
       ? DateFormat('h:mm a').format(guest.checkInTime!)
@@ -389,14 +399,13 @@ Widget _buildAttendeeTile(Attendee guest, Event? events) {
       ? DateFormat('MMM d, yyyy').format(guest.checkInTime!)
       : 'Today';
 
-  final roleDisplay = guest.role.isNotEmpty
-      ? '${guest.role[0].toUpperCase()}${guest.role.substring(1).toLowerCase()}'
-      : 'Guest';
+  // Name tag — "Mover"/"Pitcher", see AttendeeRole.
+  final roleDisplay = guest.roleLabel;
 
-  // Participants show designation + company + email; everyone else shows
-  // the check-in date (+ company, if on file).
+  // Pitchers show designation + company + email; movers show the check-in
+  // date (+ company, if on file).
   final String secondLine;
-  if (isParticipant) {
+  if (isPitcher) {
     final parts = [
       guest.designation,
       guest.companyName,
@@ -413,9 +422,7 @@ Widget _buildAttendeeTile(Attendee guest, Event? events) {
     isThreeLine: true,
     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
     leading: CircleAvatar(
-      backgroundColor: guest.role.toLowerCase() == 'participant'
-          ? Colors.deepPurple
-          : Colors.green,
+      backgroundColor: isPitcher ? Colors.deepPurple : Colors.green,
       child: const Icon(Icons.how_to_reg, color: Colors.white, size: 20),
     ),
     title: RichText(

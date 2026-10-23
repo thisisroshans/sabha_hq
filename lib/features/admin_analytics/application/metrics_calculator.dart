@@ -1,18 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sabha_hq/core/firebase/firestore_refs.dart';
+import 'package:sabha_hq/core/models/attendee.dart';
 import 'package:sabha_hq/core/providers/current_org_provider.dart';
 
 class EventMetrics {
   final int totalRegistered;
   final int totalCheckedIn;
-  final int guests;
-  final int participants;
+  // Movers/pitchers are the stored 'guest'/'participant' roles — see
+  // AttendeeRole for why the stored values didn't change with the names.
+  final int movers;
+  final int pitchers;
 
   const EventMetrics({
     required this.totalRegistered,
     required this.totalCheckedIn,
-    required this.guests,
-    required this.participants,
+    required this.movers,
+    required this.pitchers,
   });
 
   int get pending => totalRegistered - totalCheckedIn;
@@ -20,8 +23,8 @@ class EventMetrics {
   static const empty = EventMetrics(
     totalRegistered: 0,
     totalCheckedIn: 0,
-    guests: 0,
-    participants: 0,
+    movers: 0,
+    pitchers: 0,
   );
 }
 
@@ -38,19 +41,19 @@ final eventMetricsProvider = FutureProvider.autoDispose
       final attendees = snapshot.docs.map((d) => d.data()).toList();
 
       int checkedIn = 0;
-      int guests = 0;
-      int participants = 0;
+      int movers = 0;
+      int pitchers = 0;
 
       for (final attendee in attendees) {
         if (attendee.isCheckedIn) checkedIn++;
-        if (attendee.role == 'guest') guests++;
-        if (attendee.role == 'participant') participants++;
+        if (attendee.role == AttendeeRole.mover) movers++;
+        if (attendee.role == AttendeeRole.pitcher) pitchers++;
       }
 
       return EventMetrics(
         totalRegistered: attendees.length,
         totalCheckedIn: checkedIn,
-        guests: guests,
-        participants: participants,
+        movers: movers,
+        pitchers: pitchers,
       );
     });

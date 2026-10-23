@@ -102,7 +102,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
               builder: (context) => GuestActivityScreen(
                 orgId: orgId,
                 eventId: eventId,
-                guestName: next.checkedInGuest?.name ?? 'Guest',
+                guestName: next.checkedInGuest?.name ?? 'Attendee',
               ),
             ),
           );
@@ -217,7 +217,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            uiState.checkedInGuest?.name ?? 'Guest',
+            uiState.checkedInGuest?.name ?? 'Attendee',
             style: TextStyle(
               fontSize: isMobile ? 26 : 36,
               fontWeight: FontWeight.bold,

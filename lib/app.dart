@@ -1,12 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/notifications/check_in_notifications.dart';
 import 'core/router/app_router.dart';
 
-class SabhaApp extends ConsumerWidget {
+class SabhaApp extends ConsumerStatefulWidget {
   const SabhaApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SabhaApp> createState() => _SabhaAppState();
+}
+
+class _SabhaAppState extends ConsumerState<SabhaApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Tapping a check-in push notification (Android/iOS) opens the live
+    // feed — including the one that cold-started the app, which is why
+    // this is wired up here at the root rather than in AdminScaffold.
+    CheckInNotifications.instance.startTapHandling(ref.read(goRouterProvider));
+  }
+
+  @override
+  Widget build(BuildContext context) {
     // Watch the router provider to rebuild if core routing logic changes
     final router = ref.watch(goRouterProvider);
 

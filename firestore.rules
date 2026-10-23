@@ -156,6 +156,28 @@ service cloud.firestore {
         // orgs/{orgId}'s limits/status/plan exclusion below) if a client
         // write path is ever actually built.
         allow write: if false;
+
+        // Push-notification devices — one doc per FCM token, written by
+        // the app itself (lib/core/notifications/check_in_notifications.dart)
+        // and read only by functions/src/notifications.ts (Admin SDK) to
+        // push every check-in to the org's owners/admins. A separate
+        // subcollection precisely so the member doc above can stay fully
+        // locked: registering a phone must never be a way to touch `role`.
+        //
+        // Strictly self-service: a member can register/remove only their
+        // OWN devices (uid == request.auth.uid), never a teammate's — so
+        // nobody can point someone else's notifications at a device they
+        // control. Not gated on orgIsActive(): it's device bookkeeping,
+        // not org data, and logging out of a suspended org must still be
+        // able to remove the device. No client reads — nothing in the app
+        // needs to list devices.
+        match /devices/{token} {
+          allow create, update: if isOrgMember(orgId) && request.auth.uid == uid &&
+            request.resource.data.keys().hasOnly(['platform', 'updatedAt']) &&
+            request.resource.data.platform in ['android', 'ios', 'web'];
+          allow delete: if isOrgMember(orgId) && request.auth.uid == uid;
+          allow read: if false;
+        }
       }
 
       match /invites/{token} {

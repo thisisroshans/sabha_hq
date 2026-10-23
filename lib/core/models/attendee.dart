@@ -1,3 +1,35 @@
+/// Attendee roles — what each one is CALLED vs. what's STORED.
+///
+/// Guests were renamed "Movers" and participants "Pitchers", but only in
+/// what the UI shows: the stored `role` values stay 'guest' and
+/// 'participant'. They're baked into every attendee doc already in
+/// production, the registerWalkIn Cloud Function
+/// (functions/src/checkIn.ts), the check-in push notification
+/// (functions/src/notifications.ts), and CSV files admins already keep
+/// on disk — rewriting all of that buys nothing a label change doesn't.
+/// Always render a role through [label]/[pluralLabel] rather than the raw
+/// string so the two can't drift apart.
+class AttendeeRole {
+  static const mover = 'guest';
+  static const pitcher = 'participant';
+
+  static bool isPitcher(String role) => role.trim().toLowerCase() == pitcher;
+
+  /// Anything that isn't a pitcher counts as a mover — same fallback
+  /// Attendee.fromMap uses for a doc with no role at all.
+  static String label(String role) => isPitcher(role) ? 'Pitcher' : 'Mover';
+
+  static String pluralLabel(String role) =>
+      isPitcher(role) ? 'Pitchers' : 'Movers';
+
+  /// Parses a role typed by an admin (CSV import) — accepts the new labels
+  /// AND the old ones, so a CSV exported before the rename still imports.
+  static String fromInput(String raw) {
+    final value = raw.trim().toLowerCase();
+    return value == pitcher || value == 'pitcher' ? pitcher : mover;
+  }
+}
+
 class Attendee {
   final String id;
   final String eventId;
@@ -35,6 +67,11 @@ class Attendee {
     this.industry = '',
     this.orgId = '',
   });
+
+  bool get isPitcher => AttendeeRole.isPitcher(role);
+
+  /// The "name tag" shown next to an attendee everywhere in the UI.
+  String get roleLabel => AttendeeRole.label(role);
 
   Attendee copyWith({
     String? id,
@@ -107,7 +144,7 @@ class Attendee {
       name: map['name'] ?? '',
       phone: map['phone'] ?? '',
       email: map['email'] ?? '',
-      role: map['role'] ?? 'guest',
+      role: map['role'] ?? AttendeeRole.mover,
       isCheckedIn: map['isCheckedIn'] ?? false,
       checkInTime: _parseCheckInTime(map['checkInTime']),
       companyName: map['companyName'] ?? '',

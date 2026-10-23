@@ -365,6 +365,47 @@ async function main() {
       );
     });
 
+    // --- Push-notification devices (members/{uid}/devices/{token}) —
+    // self-service only, see firestore.rules' devices match block. ---
+    const device = { platform: "android", updatedAt: new Date() };
+
+    await check("a member CAN register and remove their OWN device", async () => {
+      await assertSucceeds(ownerA(testEnv).firestore().doc("orgs/org-a/members/owner-a/devices/tok-owner-a").set(device));
+      await assertSucceeds(
+        ownerA(testEnv).firestore().doc("orgs/org-a/members/owner-a/devices/tok-owner-a").set({ platform: "ios", updatedAt: new Date() })
+      );
+      await assertSucceeds(ownerA(testEnv).firestore().doc("orgs/org-a/members/owner-a/devices/tok-owner-a").delete());
+      // Staff register too (the role check happens at send time, server-side).
+      await assertSucceeds(staffA(testEnv).firestore().doc("orgs/org-a/members/staff-a/devices/tok-staff-a").set(device));
+    });
+
+    await check("a member CANNOT register a device under a TEAMMATE's uid (would hijack their notifications)", async () => {
+      await assertFails(staffA(testEnv).firestore().doc("orgs/org-a/members/owner-a/devices/tok-evil").set(device));
+      await assertFails(ownerA(testEnv).firestore().doc("orgs/org-a/members/staff-a/devices/tok-staff-a").delete());
+    });
+
+    await check("a device CANNOT be registered under another org's member path", async () => {
+      await assertFails(ownerB(testEnv).firestore().doc("orgs/org-a/members/owner-b/devices/tok-b").set(device));
+    });
+
+    await check("device docs only accept {platform, updatedAt} — no smuggling extra fields like role", async () => {
+      await assertFails(
+        ownerA(testEnv).firestore().doc("orgs/org-a/members/owner-a/devices/tok-x").set({ ...device, role: "owner" })
+      );
+      await assertFails(
+        ownerA(testEnv).firestore().doc("orgs/org-a/members/owner-a/devices/tok-x").set({ platform: "toaster", updatedAt: new Date() })
+      );
+    });
+
+    await check("nobody reads device tokens from the client — not even their owner", async () => {
+      await assertFails(ownerA(testEnv).firestore().doc("orgs/org-a/members/staff-a/devices/tok-staff-a").get());
+      await assertFails(staffA(testEnv).firestore().doc("orgs/org-a/members/staff-a/devices/tok-staff-a").get());
+    });
+
+    await check("an anonymous guest session cannot register a device", async () => {
+      await assertFails(guestOfEvtA(testEnv).firestore().doc("orgs/org-a/members/guest-1/devices/tok-g").set(device));
+    });
+
     await check("even the owner cannot read the check-in audit log (Admin-SDK only)", async () => {
       await testEnv.withSecurityRulesDisabled(async (ctx) => {
         await ctx.firestore().doc("orgs/org-a/events/evt-a/checkInLog/entry-1").set({ uid: "guest-1", result: "checked_in" });

@@ -16,6 +16,7 @@ import 'package:sabha_hq/features/admin_guests/presentation/guest_management_scr
 import 'package:sabha_hq/features/admin_org/presentation/accept_invite_screen.dart';
 import 'package:sabha_hq/features/admin_org/presentation/team_screen.dart';
 import 'package:sabha_hq/features/attendee_check_in/presentation/check_in_screen.dart';
+import 'package:sabha_hq/features/attendee_check_in/presentation/guest_activity_screen.dart';
 import 'package:sabha_hq/features/attendee_feedback/presentation/feedback_screen.dart';
 import 'package:sabha_hq/features/platform/presentation/audit_log_screen.dart';
 import 'package:sabha_hq/features/platform/presentation/org_detail_screen.dart';
@@ -106,6 +107,27 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           final orgId = state.uri.queryParameters['orgId'];
           final eventId = state.uri.queryParameters['eventId'];
           return CheckInScreen(orgId: orgId, eventId: eventId);
+        },
+      ),
+      GoRoute(
+        path: '/live-event',
+        builder: (context, state) {
+          // Where /check-in lands after a successful check-in: the live
+          // roster + agenda. Its own route (not a Navigator push on top of
+          // /check-in) so its Logout's context.go('/check-in?...') is a
+          // real navigation — see check_in_screen.dart. Same public,
+          // orgId-in-the-URL reasoning as /check-in; without a guest
+          // session for this event the roster just shows its error state.
+          final orgId = state.uri.queryParameters['orgId'];
+          final eventId = state.uri.queryParameters['eventId'];
+          if (orgId == null || eventId == null) {
+            return CheckInScreen(orgId: orgId, eventId: eventId);
+          }
+          return GuestActivityScreen(
+            orgId: orgId,
+            eventId: eventId,
+            guestName: state.extra as String? ?? 'Attendee',
+          );
         },
       ),
       GoRoute(

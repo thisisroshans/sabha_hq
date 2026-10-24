@@ -262,6 +262,29 @@ service cloud.firestore {
       }
     }
 
+    // The admin dashboard's "All Events" live feed (and the "just checked
+    // in!" banner, which watches the same stream — see
+    // live_feed_providers.dart / admin_scaffold.dart) is a
+    // collectionGroup('attendees') query. Collection-group queries are
+    // ONLY evaluated against rules written with a recursive wildcard like
+    // this one — the nested orgs/{orgId}/events/{eventId}/attendees match
+    // above never applies to them — so without this, that query was denied
+    // outright and the dashboard's default Live view showed a
+    // permission-denied error. (docs/saas-schema.md always described this
+    // rule; it was never actually written. Found by the end-to-end test,
+    // integration_test/e2e_test.dart.)
+    //
+    // Scoped by the denormalised orgId field — the reason that field
+    // exists. It's trustworthy because every client write must set it to
+    // the org in its own path (attendeeDataValid) and the Admin SDK writers
+    // (checkIn.ts, migrate-to-orgs.js) do the same. The query itself
+    // filters on orgId == the caller's org, which is what lets Firestore
+    // prove this rule for the whole result set. Guest sessions carry no
+    // orgId claim, so this grants them nothing.
+    match /{path=**}/attendees/{attendeeId} {
+      allow read: if isOrgMember(resource.data.orgId) || isPlatformOwner();
+    }
+
     // Sabha HQ's own audit trail of platform-owner actions (limit
     // changes, suspensions) — functions/src/platform.ts writes every
     // entry via the Admin SDK. No client write path exists, so every

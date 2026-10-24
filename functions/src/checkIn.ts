@@ -1,5 +1,12 @@
 import { CallableRequest, HttpsError, onCall } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+// FieldValue/Timestamp from the modular entry point rather than as
+// admin.firestore.FieldValue: identical in production, but the Functions
+// emulator wraps the namespaced admin module in a proxy that drops those
+// static members, so every check-in crashed with "Cannot read properties
+// of undefined (reading 'serverTimestamp')" when run locally — which is
+// how the end-to-end test (integration_test/e2e_test.dart) exercises it.
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { normalizePhone, phoneLookupVariants } from "./phone";
 import { orgLimits } from "./limits";
 
@@ -120,7 +127,7 @@ async function logAttempt(
       uid,
       phone: normalizePhone(phone),
       result,
-      at: admin.firestore.FieldValue.serverTimestamp(),
+      at: FieldValue.serverTimestamp(),
     });
 }
 
@@ -137,7 +144,7 @@ function requireString(value: unknown, field: string): string {
 // client code approximated with DateTime.now() after firing off a
 // FieldValue.serverTimestamp() write.
 function serializeAttendee(id: string, data: FirebaseFirestore.DocumentData) {
-  const checkInTime = data.checkInTime as admin.firestore.Timestamp | undefined;
+  const checkInTime = data.checkInTime as Timestamp | undefined;
   return {
     ...data,
     id,
@@ -205,7 +212,7 @@ export async function checkInHandler(
   const normalizedPhone = normalizePhone(phone);
   await doc.ref.update({
     isCheckedIn: true,
-    checkInTime: admin.firestore.FieldValue.serverTimestamp(),
+    checkInTime: FieldValue.serverTimestamp(),
     // Self-heals legacy phone formats on check-in, same as before.
     phone: normalizedPhone,
   });
@@ -218,7 +225,7 @@ export async function checkInHandler(
       ...data,
       isCheckedIn: true,
       phone: normalizedPhone,
-      checkInTime: admin.firestore.Timestamp.now(),
+      checkInTime: Timestamp.now(),
     }),
   };
 }
@@ -287,7 +294,7 @@ export async function registerWalkInHandler(
     industry: (data.industry ?? "").trim(),
     role: "participant",
     isCheckedIn: true,
-    checkInTime: admin.firestore.FieldValue.serverTimestamp(),
+    checkInTime: FieldValue.serverTimestamp(),
   };
 
   await docRef.set(attendee);
@@ -295,7 +302,7 @@ export async function registerWalkInHandler(
 
   return serializeAttendee(docRef.id, {
     ...attendee,
-    checkInTime: admin.firestore.Timestamp.now(),
+    checkInTime: Timestamp.now(),
   });
 }
 

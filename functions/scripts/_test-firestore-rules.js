@@ -365,6 +365,36 @@ async function main() {
       );
     });
 
+    // --- The admin "All Events" live feed: a collectionGroup('attendees')
+    // query (live_feed_providers.dart), allowed only by the recursive
+    // match in firestore.rules — and only when scoped to the caller's org. ---
+    const allEventsFeed = (ctx, org) =>
+      ctx
+        .firestore()
+        .collectionGroup("attendees")
+        .where("orgId", "==", org)
+        .where("isCheckedIn", "==", true)
+        .orderBy("checkInTime", "desc")
+        .limit(50)
+        .get();
+
+    await check("an org member CAN run the all-events live feed query for their own org", async () => {
+      await assertSucceeds(allEventsFeed(ownerA(testEnv), "org-a"));
+      await assertSucceeds(allEventsFeed(staffA(testEnv), "org-a"));
+    });
+
+    await check("an org member CANNOT run the all-events query for another org", async () => {
+      await assertFails(allEventsFeed(ownerA(testEnv), "org-b"));
+    });
+
+    await check("an org member CANNOT run an UNSCOPED collection-group query over every org's attendees", async () => {
+      await assertFails(ownerA(testEnv).firestore().collectionGroup("attendees").get());
+    });
+
+    await check("a guest session gets nothing from the collection-group query", async () => {
+      await assertFails(allEventsFeed(guestOfEvtA(testEnv), "org-a"));
+    });
+
     // --- Push-notification devices (members/{uid}/devices/{token}) —
     // self-service only, see firestore.rules' devices match block. ---
     const device = { platform: "android", updatedAt: new Date() };

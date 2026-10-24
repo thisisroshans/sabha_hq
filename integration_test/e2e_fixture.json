@@ -1,0 +1,7 @@
+{
+  "USE_FIREBASE_EMULATORS": "true",
+  "E2E_ORG_ID": "e2e-demo-org",
+  "E2E_EVENT_ID": "demo-day-2026",
+  "E2E_OWNER_EMAIL": "e2e-owner@sabha-hq.test",
+  "E2E_OWNER_PASSWORD": "e2e-Jo0n02iN5R-g"
+}

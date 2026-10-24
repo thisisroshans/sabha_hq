@@ -103,6 +103,16 @@ npm run test:notifications  # check-in push notifications: who gets them, what t
 npm run test:rules       # firestore.rules isolation guarantees (org A can't read org B, etc.)
 ```
 
+**End-to-end** — the real app on an Android emulator against the local
+emulators with mock data, recorded to `build/e2e/sabha_hq_e2e.mp4`:
+
+```bash
+integration_test/run_e2e_android.sh emulator-5554
+```
+
+See [`integration_test/README.md`](integration_test/README.md) for what it
+covers and how to set it up.
+
 ## Deploying
 
 Cloud Functions, Firestore rules/indexes, and the Flutter web build are

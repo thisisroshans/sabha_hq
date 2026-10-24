@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sabha_hq/core/utils/color_utils.dart';
 import 'package:sabha_hq/features/admin_events/application/event_providers.dart';
-import 'package:sabha_hq/features/attendee_check_in/presentation/guest_activity_screen.dart';
 import '../application/phone_auth_controller.dart';
 import '../application/staff_check_in_controller.dart';
 
@@ -97,14 +97,16 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
         Future.delayed(const Duration(milliseconds: 1500), () {
           if (!context.mounted) return;
 
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => GuestActivityScreen(
-                orgId: orgId,
-                eventId: eventId,
-                guestName: next.checkedInGuest?.name ?? 'Attendee',
-              ),
-            ),
+          // Through go_router, to a URL of its own (see app_router.dart's
+          // /live-event) — not Navigator.pushReplacement. A raw push left
+          // the router still believing it was on /check-in, so the Live
+          // Event screen's Logout (context.go back to /check-in) was a
+          // no-op: the guest got signed out but the kiosk stayed stuck on a
+          // "Couldn't load the live feed" screen, and the next attendee
+          // couldn't check in. Found by integration_test/e2e_test.dart.
+          context.go(
+            '/live-event?orgId=$orgId&eventId=$eventId',
+            extra: next.checkedInGuest?.name ?? 'Attendee',
           );
         });
       }

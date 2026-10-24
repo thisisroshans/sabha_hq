@@ -7,6 +7,16 @@ final guestAuthControllerProvider =
       GuestAuthController.new,
     );
 
+/// ensureSignedIn() found an organizer (email/password) signed in on this
+/// browser. beginGuestSession only accepts anonymous sessions, so check-in
+/// can't proceed — but signing them out silently would also log them out
+/// of the dashboard in every other tab on this origin, so the check-in
+/// screen asks first instead.
+class OrganizerSignedInException implements Exception {
+  final String? email;
+  const OrganizerSignedInException(this.email);
+}
+
 /// Ensures the kiosk has an active, event-scoped Firebase Auth session
 /// before any check-in read/write hits Firestore. Two steps, both silent —
 /// the guest never sees either:
@@ -43,10 +53,29 @@ class GuestAuthController extends AutoDisposeNotifier<AsyncValue<void>> {
   }
 
   Future<bool> ensureSignedIn() async {
-    if (_auth.currentUser != null) return true;
+    final user = _auth.currentUser;
+    if (user != null && user.isAnonymous) return true;
+
+    // Any existing session that isn't anonymous gets rejected by
+    // beginGuestSession, which used to surface as a misleading "Could not
+    // connect". An organizer is the same isAdmin test app_router.dart uses.
+    if (user != null && user.email != null) {
+      _setStateIfMounted(
+        AsyncValue.error(
+          OrganizerSignedInException(user.email),
+          StackTrace.current,
+        ),
+      );
+      return false;
+    }
 
     _setStateIfMounted(const AsyncValue.loading());
     try {
+      // Anything else is a stale guest login — e.g. the phone-OTP check-in
+      // this app used before anonymous guest sessions (removed Aug 2026),
+      // which browsers that checked into an older event still remember.
+      // Nobody else uses that session, so just replace it.
+      if (user != null) await _auth.signOut();
       await _auth.signInAnonymously();
       _setStateIfMounted(const AsyncValue.data(null));
       return true;

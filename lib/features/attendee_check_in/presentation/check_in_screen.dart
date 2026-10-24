@@ -1,8 +1,10 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sabha_hq/core/utils/color_utils.dart';
+import 'package:sabha_hq/features/admin_auth/application/auth_controller.dart';
 import 'package:sabha_hq/features/admin_events/application/event_providers.dart';
 import '../application/phone_auth_controller.dart';
 import '../application/staff_check_in_controller.dart';
@@ -75,6 +77,28 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
         .ensureGuestSession(orgId, eventId);
     if (!ready || !mounted) return;
     ref.read(staffCheckInProvider.notifier).submitPhone(orgId, eventId, phone);
+  }
+
+  Future<void> _signOutOrganizerAndContinue(String orgId, String eventId) async {
+    // The dashboard's own Logout, so this device's check-in push
+    // registration is removed while the organizer can still delete it.
+    await ref.read(authControllerProvider.notifier).logout();
+    if (!mounted) return;
+    await ref
+        .read(guestAuthControllerProvider.notifier)
+        .ensureGuestSession(orgId, eventId);
+  }
+
+  // beginGuestSession's not-found / failed-precondition messages are written
+  // for guests ("Event not found.", "This event is not currently
+  // available.") — show those as-is instead of blaming the connection.
+  String _guestSessionErrorText(Object? error) {
+    if (error is FirebaseFunctionsException &&
+        (error.code == 'not-found' || error.code == 'failed-precondition') &&
+        error.message != null) {
+      return error.message!;
+    }
+    return 'Could not connect. Please try again.';
   }
 
   @override
@@ -356,11 +380,66 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
       );
     }
 
+    // -------------------------------------------------------------
+    // ORGANIZER SIGNED IN ON THIS BROWSER
+    // -------------------------------------------------------------
+    final authError = guestAuthState.error;
+    if (authError is OrganizerSignedInException) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.admin_panel_settings_outlined,
+            size: isMobile ? 60 : 80,
+            color: themeColor,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            "You're signed in as an organizer",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: isMobile ? 18 : 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '${authError.email ?? 'An organizer account'} is signed in on '
+            "this browser, so it can't be used for guest check-in. Attendees "
+            "checking in on their own phones aren't affected.\n\n"
+            'Sign out to check in here, or open this link in a private / '
+            'incognito window to stay signed in to the dashboard.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey[700], height: 1.4),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton(
+              onPressed: () => _signOutOrganizerAndContinue(orgId, eventId),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: themeColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Sign out & check in as guest',
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     final isBusy =
         guestAuthState.isLoading || uiState.step == CheckInStep.loading;
     final errorText =
         guestAuthState.hasError
-            ? 'Could not connect. Please try again.'
+            ? _guestSessionErrorText(guestAuthState.error)
             : uiState.errorMessage;
 
     // -------------------------------------------------------------
